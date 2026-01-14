@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlay_container"
+    android:layout_width="64dp"
+    android:layout_height="64dp"
+    android:padding="4dp">
+
+    <!-- Background circle -->
+    <View
+        android:id="@+id/overlay_background"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:background="@drawable/overlay_button_background" />
+
+    <!-- Microphone icon (shown when idle) -->
+    <ImageView
+        android:id="@+id/icon_mic"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_mic"
+        android:contentDescription="@string/start_recording"
+        android:visibility="visible" />
+
+    <!-- Stop icon (shown when recording) -->
+    <ImageView
+        android:id="@+id/icon_stop"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_stop"
+        android:contentDescription="@string/stop_recording"
+        android:visibility="gone" />
+
+    <!-- Progress indicator (shown when processing) -->
+    <ProgressBar
+        android:id="@+id/progress_indicator"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+</FrameLayout>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VoiceInk</string>
+    <string name="accessibility_service_description">VoiceInk uses accessibility to insert transcribed text directly into any text field. This allows you to dictate into any app without copy-pasting.</string>
+    <string name="start_recording">Start recording</string>
+    <string name="stop_recording">Stop recording</string>
+    <string name="overlay_notification_title">VoiceInk Recording</string>
+    <string name="overlay_notification_text">Tap the floating button to record</string>
+    <string name="ime_subtype_voice">Voice Input</string>
+</resources>
