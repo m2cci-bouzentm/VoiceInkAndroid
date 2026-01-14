@@ -638,14 +638,44 @@ Added two new multilingual local models as alternatives to the broken Parakeet m
 ### Voice Input Method (IME) - Replaces Failed VoiceInputService
 The VoiceInputService (RecognitionService) approach didn't work on Samsung devices - only Google and Samsung voice input appeared in settings. Replaced with a proper IME (InputMethodService) approach.
 
+### Initial Implementation Issues & Solutions:
+
+**Issue 1: Hilt @EntryPoint annotation error**
+- Error: `Unresolved reference: EntryPoint`
+- Fix: Changed `import dagger.hilt.android.EntryPoint` to `import dagger.hilt.EntryPoint` and added proper imports for `InstallIn` and `SingletonComponent`
+
+**Issue 2: ViewTreeLifecycleOwner crash with Compose UI**
+- Error: `java.lang.IllegalStateException: ViewTreeLifecycleOwner not found from android.widget.LinearLayout`
+- Initial attempted fix: Changed `ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed` to `ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycle)`
+- Final solution: **Switched from Compose to XML layout** for simpler, more reliable implementation
+
+**Issue 3: OverlayService auto-start crash**
+- Error: `SecurityException: Starting FGS with type microphone...requires permissions...and the app must be in the eligible state`
+- Cause: `VoiceInkApplication.onCreate()` was auto-starting OverlayService when IME launched (background context)
+- Fix: Removed auto-start code from VoiceInkApplication, keeping it only in MainActivity
+
+**Issue 4: IME not showing when text field focused on Samsung**
+- Cause: Samsung One UI overrides programmatic keyboard selection
+- Fix: User must manually switch keyboards via Samsung Keyboard's keyboard switcher icon or long-press spacebar
+
 ### New Files:
 - `services/VoiceInkInputMethodService.kt` - Voice-only keyboard IME with:
-  - Compose UI with mic button, status text, and "Switch keyboard" button
+  - **XML layout** (not Compose) for simpler lifecycle management
   - Audio recording to WAV file
-  - Transcription via TranscriptionRegistry
+  - Transcription via TranscriptionRegistry (Hilt EntryPoint pattern)
   - Text insertion via `currentInputConnection.commitText()`
-  - Hilt dependency injection via EntryPoint
-  - Lifecycle management for Compose in service context
+  - **Double-tap detection** for clearing input (300ms timeout)
+  - Switch keyboard button using `InputMethodManager.showInputMethodPicker()`
+
+- `res/layout/keyboard_view.xml` - Clean, compact IME layout:
+  - Status text showing current state
+  - Large mic button with overlay button background
+  - Hint text ("Double-tap to clear")
+  - Switch keyboard button
+
+- `res/drawable/ime_background.xml` - Gradient background (#1a1a2e to #16213e)
+
+- `res/drawable/ime_switch_button_bg.xml` - Rounded button with semi-transparent white
 
 - `res/xml/input_method.xml` - IME configuration with voice subtype
 
@@ -653,6 +683,10 @@ The VoiceInputService (RecognitionService) approach didn't work on Samsung devic
 - `AndroidManifest.xml`:
   - Added VoiceInkInputMethodService with `BIND_INPUT_METHOD` permission
   - Removed VoiceInputService and VoiceInputActivity
+
+- `VoiceInkApplication.kt`:
+  - Removed OverlayService auto-start (caused crashes when IME launches in background)
+  - Added comment explaining why overlay service is started from MainActivity only
 
 - `res/values/strings.xml`:
   - Added `ime_subtype_voice` string
@@ -664,6 +698,11 @@ The VoiceInputService (RecognitionService) approach didn't work on Samsung devic
 - `services/VoiceInputService.kt` - RecognitionService didn't work on Samsung
 - `ui/voiceinput/VoiceInputActivity.kt` - No longer needed
 - `res/xml/voice_input_service.xml` - No longer needed
+
+### Key Features:
+1. **Double-tap to clear**: Quickly clear the current input with a double-tap on the mic button
+2. **Clean design**: Gradient background, properly sized mic button, minimal UI
+3. **Switch keyboard**: Easy button to return to regular keyboard
 
 ### Why IME Works Better Than RecognitionService
 1. **Standard Android API**: InputMethodService is the official way to provide text input
