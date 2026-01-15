@@ -27,6 +27,7 @@ class SettingsRepository @Inject constructor(
         val OPENAI_API_KEY = stringPreferencesKey("openai_api_key")
         val SELECTED_MODEL_ID = stringPreferencesKey("selected_model_id")
         val OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
+        val AUTO_PUNCTUATION_ENABLED = booleanPreferencesKey("auto_punctuation_enabled")
     }
 
     // API Keys
@@ -69,6 +70,17 @@ class SettingsRepository @Inject constructor(
     suspend fun setOverlayEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.OVERLAY_ENABLED] = enabled
+        }
+    }
+
+    // Auto-punctuation Enabled
+    val autoPunctuationEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.AUTO_PUNCTUATION_ENABLED] ?: false
+    }
+
+    suspend fun setAutoPunctuationEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.AUTO_PUNCTUATION_ENABLED] = enabled
         }
     }
 

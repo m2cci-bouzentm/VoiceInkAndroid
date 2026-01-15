@@ -25,8 +25,10 @@ import com.voiceink.android.MainActivity
 import com.voiceink.android.R
 import com.voiceink.android.data.audio.AudioRecorder
 import com.voiceink.android.data.audio.RecordingState
+import com.voiceink.android.data.history.TranscriptionHistoryRepository
 import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.PredefinedModels
+import com.voiceink.android.domain.model.TranscriptionModel
 import com.voiceink.android.domain.transcription.TranscriptionRegistry
 import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,6 +42,12 @@ import java.io.File
 import javax.inject.Inject
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.widget.Toast
 
 /**
  * Foreground service that displays a floating overlay button for recording.
@@ -94,6 +102,9 @@ class OverlayService : Service() {
     @Inject
     lateinit var settingsRepository: SettingsRepository
 
+    @Inject
+    lateinit var historyRepository: TranscriptionHistoryRepository
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var currentRecordingFile: File? = null
 
@@ -118,6 +129,17 @@ class OverlayService : Service() {
     // Double-tap detection
     private var lastTapTime = 0L
     private val doubleTapTimeout = 300L // milliseconds
+
+    // Long-press detection for abort
+    private val longPressHandler = Handler(Looper.getMainLooper())
+    private val longPressTimeout = 500L // milliseconds
+    private var isLongPressTriggered = false
+    private val longPressRunnable = Runnable {
+        if (audioRecorder.state.value == RecordingState.RECORDING) {
+            isLongPressTriggered = true
+            abortRecording()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -251,6 +273,12 @@ class OverlayService : Service() {
                 initialTouchX = event.rawX
                 initialTouchY = event.rawY
                 isDragging = false
+                isLongPressTriggered = false
+                
+                // Start long-press timer if recording (for abort)
+                if (audioRecorder.state.value == RecordingState.RECORDING) {
+                    longPressHandler.postDelayed(longPressRunnable, longPressTimeout)
+                }
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -259,6 +287,8 @@ class OverlayService : Service() {
 
                 if (!isDragging && (kotlin.math.abs(deltaX) > dragThreshold || kotlin.math.abs(deltaY) > dragThreshold)) {
                     isDragging = true
+                    // Cancel long-press if user starts dragging
+                    longPressHandler.removeCallbacks(longPressRunnable)
                 }
 
                 if (isDragging) {
@@ -273,6 +303,15 @@ class OverlayService : Service() {
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                // Cancel long-press timer
+                longPressHandler.removeCallbacks(longPressRunnable)
+                
+                // If long-press was triggered, don't process as tap
+                if (isLongPressTriggered) {
+                    isLongPressTriggered = false
+                    return true
+                }
+                
                 if (!isDragging) {
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastTapTime < doubleTapTimeout) {
@@ -286,6 +325,11 @@ class OverlayService : Service() {
                         toggleRecording()
                     }
                 }
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                // Cancel long-press timer on touch cancel
+                longPressHandler.removeCallbacks(longPressRunnable)
                 return true
             }
         }
@@ -342,6 +386,9 @@ class OverlayService : Service() {
                 is TranscriptionResult.Success -> {
                     Log.d(TAG, "Transcription successful: ${result.text}")
 
+                    // Save to history before deleting the audio file
+                    saveToHistory(result.text, model, audioFile)
+
                     // Try to inject text into focused field
                     if (TextInjectionService.isServiceEnabled()) {
                         val injected = TextInjectionService.injectText(result.text)
@@ -368,6 +415,20 @@ class OverlayService : Service() {
         audioFile.delete()
     }
 
+    private suspend fun saveToHistory(text: String, model: TranscriptionModel, audioFile: File) {
+        try {
+            historyRepository.save(
+                text = text,
+                model = model,
+                audioFile = audioFile,
+                wasStreaming = false,
+                hadAutoPunctuation = false
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save to history", e)
+        }
+    }
+
     private fun copyToClipboard(text: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("VoiceInk Transcription", text)
@@ -380,6 +441,40 @@ class OverlayService : Service() {
             Log.d(TAG, "Clear input result: $cleared")
         } else {
             Log.d(TAG, "Accessibility service not enabled, cannot clear input")
+        }
+    }
+
+    private fun abortRecording() {
+        serviceScope.launch {
+            val cancelled = audioRecorder.cancelRecording()
+            if (cancelled) {
+                Log.d(TAG, "Recording aborted via long-press")
+                // Haptic feedback
+                vibrateDevice()
+                // Show brief toast
+                Toast.makeText(this@OverlayService, "Recording cancelled", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun vibrateDevice() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                val vibrator = vibratorManager.defaultVibrator
+                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(100)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to vibrate", e)
         }
     }
 

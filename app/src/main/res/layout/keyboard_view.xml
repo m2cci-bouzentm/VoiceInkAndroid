@@ -18,19 +18,43 @@
         android:textSize="13sp"
         android:fontFamily="sans-serif-medium" />
 
-    <!-- Mic button -->
-    <ImageButton
-        android:id="@+id/micButton"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+    <!-- Mic button and cancel button in a row -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:background="@drawable/overlay_button_background"
-        android:src="@drawable/ic_mic"
-        android:contentDescription="Record"
-        android:scaleType="center"
-        android:elevation="4dp" />
+        android:gravity="center"
+        android:orientation="horizontal">
 
-    <!-- Hint text for double-tap -->
+        <!-- Cancel button (shown when recording) -->
+        <TextView
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginEnd="16dp"
+            android:paddingHorizontal="16dp"
+            android:gravity="center"
+            android:text="Cancel"
+            android:textColor="#FF6B6B"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:background="@drawable/ime_switch_button_bg"
+            android:visibility="gone" />
+
+        <!-- Mic button -->
+        <ImageButton
+            android:id="@+id/micButton"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/overlay_button_background"
+            android:src="@drawable/ic_mic"
+            android:contentDescription="Record"
+            android:scaleType="center"
+            android:elevation="4dp" />
+
+    </LinearLayout>
+
+    <!-- Hint text - changes based on state -->
     <TextView
         android:id="@+id/hintText"
         android:layout_width="wrap_content"

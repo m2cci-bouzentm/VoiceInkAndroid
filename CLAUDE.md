@@ -228,6 +228,27 @@ app/src/main/
 
 **Note:** The RecognitionService approach was attempted but didn't work reliably on Samsung devices (only showed Google and Samsung voice input options). IME approach is the standard way to provide text input on Android.
 
+### Abort/Cancel Recording
+Allows users to stop recording **without processing/transcribing** the audio. The recorded file is discarded.
+
+**Triggers by interface:**
+| Interface | Trigger | Feedback |
+|-----------|---------|----------|
+| **HomeScreen** | Long-press record button OR tap "Cancel" button | UI reverts to idle |
+| **Floating Button** | Long-press (500ms) while recording | Vibration + Toast |
+| **Voice Keyboard (IME)** | Long-press mic OR tap "Cancel" button | Toast |
+
+**Core implementation:**
+- `AudioRecorder.cancelRecording()` - Stops recording, deletes audio file, resets to IDLE
+- All UIs show "Long-press to cancel" hint during recording
+
+**Key files:**
+- `data/audio/AudioRecorder.kt` - Core `cancelRecording()` method (lines 142-161)
+- `ui/screens/home/HomeScreen.kt` - Long-press on record button + Cancel text button
+- `ui/screens/home/HomeViewModel.kt` - `cancelRecording()` method
+- `services/OverlayService.kt` - `abortRecording()` with long-press detection (500ms)
+- `services/VoiceInkInputMethodService.kt` - `abortRecording()` for IME
+
 ## Permissions (AndroidManifest.xml)
 
 ```xml
@@ -710,6 +731,86 @@ The VoiceInputService (RecognitionService) approach didn't work on Samsung devic
 3. **Direct text insertion**: Uses `currentInputConnection` instead of callbacks
 4. **User controls when to use it**: Switch to VoiceInk "keyboard" when needed, switch back after
 
+## Key Files Modified/Created (Session 11)
+
+### Abort/Cancel Recording Feature
+Added the ability to cancel a recording without processing/transcribing it. Implemented consistently across all three recording interfaces.
+
+### Modified Files:
+- `data/audio/AudioRecorder.kt`:
+  - Added `cancelRecording()` method (lines 142-161)
+  - Stops recording, releases resources, deletes partial recording file
+  - Returns boolean indicating success
+
+- `ui/screens/home/HomeScreen.kt`:
+  - Added long-press gesture on record button to cancel (`onLongClick`)
+  - Added "Cancel" text button below record button (visible during recording)
+  - Added "Long-press to cancel" hint text during recording
+
+- `ui/screens/home/HomeViewModel.kt`:
+  - Added `cancelRecording()` method that calls `audioRecorder.cancelRecording()`
+
+- `services/OverlayService.kt`:
+  - Added long-press detection (500ms threshold) using `Handler` and `Runnable`
+  - Added `abortRecording()` method with haptic feedback (100ms vibration) and toast
+  - Long-press timer starts on `ACTION_DOWN` if recording, cancels if user drags
+
+- `services/VoiceInkInputMethodService.kt`:
+  - Added `abortRecording()` method
+  - Added long-press listener on mic button
+  - Added visible Cancel button (hidden by default, shown during recording)
+  - Hint text changes to "Long-press to cancel" during recording
+
+- `res/values/strings.xml`:
+  - Added `recording_cancelled` string
+  - Added `cancel` string
+  - Added `long_press_to_cancel` string
+
+- `res/layout/keyboard_view.xml`:
+  - Added Cancel button (initially hidden)
+
+## Key Files Modified/Created (Session 12)
+
+### Usage Tracking & Subscription Foundation (Phase 1 of Premium Features)
+Implemented usage tracking infrastructure for monetization. Free tier limits: 60 min local / 5 min cloud per month.
+
+### New Files:
+- `data/preferences/UsageRepository.kt` - Tracks transcription usage:
+  - Stores local/cloud minutes used in DataStore
+  - Monthly reset logic (automatic on first transcription of new month)
+  - `canTranscribeFile()` checks limits before transcription
+  - `trackUsage()` records usage after successful transcription
+  - `getAudioDurationMinutes()` calculates WAV file duration
+  - `UsageStats` data class for complete usage snapshot
+  - Constants: `FREE_LOCAL_MINUTES = 60f`, `FREE_CLOUD_MINUTES = 5f`
+
+- `data/subscription/SubscriptionRepository.kt` - Subscription management stub:
+  - `SubscriptionTier` enum (FREE, PRO)
+  - `isPro` property (always returns false for now)
+  - `purchase()` and `restorePurchases()` stubs for RevenueCat integration
+  - `ProFeature` enum defining which features require pro tier
+  - Ready for RevenueCat integration later
+
+### Modified Files:
+- `domain/transcription/TranscriptionRegistry.kt`:
+  - Added `UsageRepository` and `SubscriptionRepository` dependencies
+  - Checks usage limits before transcription
+  - Returns error if free limit exceeded
+  - Tracks usage after successful transcription
+
+### How It Works:
+1. User initiates transcription
+2. `TranscriptionRegistry` checks `canTranscribeFile()` against limits
+3. If over limit and not Pro: returns error message prompting upgrade
+4. If within limit: proceeds with transcription
+5. On success: calls `trackUsage()` to record minutes used
+6. On month change: usage automatically resets
+
+### Pending (Future Sessions):
+- Settings UI for usage display (Phase 2)
+- RevenueCat billing integration (Phase 6)
+- Room database for transcription history (Phase 2)
+
 ---
 *Last updated: January 14, 2026*
 *Session 1: Initial project setup, build fixes*
@@ -722,3 +823,150 @@ The VoiceInputService (RecognitionService) approach didn't work on Samsung devic
 *Session 8: Added SenseVoice & Whisper Small multilingual models, marked Parakeet as broken, removed floating button animation*
 *Session 9: Replaced Groq with OpenAI Whisper, updated Gemini models (2.5/2.0)*
 *Session 10: Replaced failed VoiceInputService with VoiceInkInputMethodService (IME) for reliable voice input from any keyboard*
+*Session 11: Added abort/cancel recording feature (long-press to cancel without transcribing)*
+*Session 12: Usage tracking foundation - UsageRepository, SubscriptionRepository stub, limit enforcement in TranscriptionRegistry*
+*Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
+
+## Key Files Modified/Created (Session 13)
+
+### Premium Features & Monetization Implementation
+Complete implementation of premium features infrastructure including transcription history, auto-punctuation, real-time streaming, ads, and usage display.
+
+### New Files - Transcription History (Room Database):
+- `data/database/TranscriptionEntity.kt` - Room entity for history entries:
+  ```kotlin
+  @Entity(tableName = "transcriptions")
+  data class TranscriptionEntity(
+      @PrimaryKey val id: String,
+      val text: String,
+      val modelId: String,
+      val modelName: String,
+      val provider: String,
+      val timestamp: Long,
+      val durationSeconds: Float,
+      val wasStreaming: Boolean,
+      val hadAutoPunctuation: Boolean
+  )
+  ```
+
+- `data/database/TranscriptionDao.kt` - Data Access Object:
+  - `getAllFlow()` - Get all transcriptions as Flow
+  - `search(query)` - Search by text content
+  - `insert()`, `delete()`, `deleteAll()`
+
+- `data/database/VoiceInkDatabase.kt` - Room database singleton
+
+- `data/history/TranscriptionHistoryRepository.kt` - Repository wrapping DAO
+
+- `ui/screens/history/HistoryScreen.kt` - Full history UI:
+  - Search functionality
+  - Delete individual items
+  - Copy to clipboard
+  - Swipe to delete
+
+- `ui/screens/history/HistoryViewModel.kt` - ViewModel for history screen
+
+### New Files - Auto-punctuation:
+- `domain/postprocessing/AutoPunctuationService.kt`:
+  - Uses Gemini API to add punctuation
+  - `punctuate(rawText): String` - Main method
+  - `isAvailable()` - Check if API key is set
+
+### New Files - Real-time Streaming:
+- `domain/transcription/StreamingTranscriptionService.kt` - Interface:
+  ```kotlin
+  sealed class StreamingResult {
+      data class Partial(val text: String) : StreamingResult()
+      data class Final(val text: String) : StreamingResult()
+      data class Error(val message: String) : StreamingResult()
+      data object Complete : StreamingResult()
+  }
+  ```
+
+- `domain/transcription/LocalStreamingService.kt`:
+  - Sherpa-ONNX OnlineRecognizer for streaming
+  - Real-time transcription as audio is recorded
+
+### New Files - Ads:
+- `data/ads/AdManager.kt` - AdMob integration:
+  - Banner ad support
+  - Interstitial after every 5 transcriptions (free users)
+  - `shouldShowBannerAd` property
+  - Test ad unit IDs (replace before production)
+
+### Modified Files:
+- `build.gradle.kts (app)`:
+  - Added Room dependencies
+  - Added Google AdMob SDK
+  - Added RevenueCat SDK (v8.10.7)
+
+- `domain/model/TranscriptionModel.kt`:
+  - Added `supportsStreaming` to LocalModel
+  - Added `StreamingModel` data class
+  - Added `streamingModels` to PredefinedModels
+
+- `data/audio/AudioRecorder.kt`:
+  - Added `startStreamingRecording()` returning Flow<FloatArray>
+  - Added `stopStreamingRecording()`
+
+- `data/preferences/SettingsRepository.kt`:
+  - Added `autoPunctuationEnabled` setting
+  - Added `streamingEnabled` setting
+  - Added `selectedStreamingModelId` setting
+
+- `ui/screens/settings/SettingsViewModel.kt`:
+  - Added UsageRepository and SubscriptionRepository dependencies
+  - Added usageStats and subscriptionTier to UI state
+  - Combine flow now includes 9 data sources
+
+- `ui/screens/settings/SettingsScreen.kt`:
+  - Added "Usage & Subscription" section
+  - UsageCard composable with:
+    - Plan badge (FREE/PRO)
+    - Local usage progress bar (X/60 min)
+    - Cloud usage progress bar (X/5 min)
+    - Next reset date
+    - Upgrade button (for free users)
+  - Added Auto-punctuation toggle
+  - Added Real-time Streaming toggle
+
+- `ui/navigation/VoiceInkNavHost.kt`:
+  - Added History screen route
+
+- `ui/screens/home/HomeScreen.kt`:
+  - Added History button to top bar
+  - Integrated history saving
+
+- `ui/screens/home/HomeViewModel.kt`:
+  - Injected TranscriptionHistoryRepository
+  - Injected AutoPunctuationService
+  - Saves transcriptions to history
+  - Applies auto-punctuation to local model results
+
+- `services/OverlayService.kt`:
+  - Saves transcriptions to history
+
+- `services/VoiceInkInputMethodService.kt`:
+  - Saves transcriptions to history via EntryPoint
+
+- `di/AppModule.kt`:
+  - Added provideVoiceInkDatabase()
+  - Added provideTranscriptionDao()
+
+### Dependencies Added:
+```kotlin
+// Room (local database)
+implementation("androidx.room:room-runtime:2.6.1")
+implementation("androidx.room:room-ktx:2.6.1")
+kapt("androidx.room:room-compiler:2.6.1")
+
+// Google Mobile Ads (AdMob)
+implementation("com.google.android.gms:play-services-ads:22.6.0")
+
+// RevenueCat (subscriptions)
+implementation("com.revenuecat.purchases:purchases:8.10.7")
+```
+
+### Issue Fixed - RevenueCat Version:
+- Error: Version 7.9.2 not found
+- Fix: Updated to version 8.10.7

@@ -5,6 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.voiceink.android.data.model.DownloadState
 import com.voiceink.android.data.model.ModelDownloadManager
 import com.voiceink.android.data.preferences.SettingsRepository
+import com.voiceink.android.data.preferences.UsageRepository
+import com.voiceink.android.data.preferences.UsageStats
+import com.voiceink.android.data.subscription.SubscriptionRepository
+import com.voiceink.android.data.subscription.SubscriptionStatus
+import com.voiceink.android.data.subscription.SubscriptionTier
 import com.voiceink.android.domain.model.LocalModel
 import com.voiceink.android.domain.model.PredefinedModels
 import com.voiceink.android.services.TextInjectionService
@@ -20,13 +25,19 @@ data class SettingsUiState(
     val downloadStates: Map<String, DownloadState> = emptyMap(),
     val downloadedModels: Set<String> = emptySet(),
     val isAccessibilityEnabled: Boolean = false,
-    val isOverlayEnabled: Boolean = false
+    val isOverlayEnabled: Boolean = false,
+    val isAutoPunctuationEnabled: Boolean = false,
+    // Usage & subscription
+    val usageStats: UsageStats = UsageStats(0f, 0f, 0L, 0),
+    val subscriptionTier: SubscriptionTier = SubscriptionTier.FREE
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val modelDownloadManager: ModelDownloadManager
+    private val modelDownloadManager: ModelDownloadManager,
+    private val usageRepository: UsageRepository,
+    private val subscriptionRepository: SubscriptionRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -40,8 +51,22 @@ class SettingsViewModel @Inject constructor(
                 settingsRepository.geminiApiKey,
                 settingsRepository.openaiApiKey,
                 modelDownloadManager.downloadStates,
-                settingsRepository.overlayEnabled
-            ) { modelId, geminiKey, openaiKey, downloadStates, overlayEnabled ->
+                settingsRepository.overlayEnabled,
+                settingsRepository.autoPunctuationEnabled,
+                usageRepository.usageStats,
+                subscriptionRepository.subscriptionStatus
+            ) { values ->
+                val modelId = values[0] as String
+                val geminiKey = values[1] as String
+                val openaiKey = values[2] as String
+                @Suppress("UNCHECKED_CAST")
+                val downloadStates = values[3] as Map<String, DownloadState>
+                val overlayEnabled = values[4] as Boolean
+                val autoPunctuationEnabled = values[5] as Boolean
+                val usageStats = values[6] as UsageStats
+                val subscriptionStatus = values[7] as SubscriptionStatus
+                val subscriptionTier = subscriptionStatus.tier
+
                 SettingsUiState(
                     selectedModelId = modelId,
                     geminiApiKey = geminiKey,
@@ -49,7 +74,10 @@ class SettingsViewModel @Inject constructor(
                     downloadStates = downloadStates,
                     downloadedModels = getDownloadedModels(),
                     isAccessibilityEnabled = TextInjectionService.isServiceEnabled(),
-                    isOverlayEnabled = overlayEnabled
+                    isOverlayEnabled = overlayEnabled,
+                    isAutoPunctuationEnabled = autoPunctuationEnabled,
+                    usageStats = usageStats,
+                    subscriptionTier = subscriptionTier
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -72,6 +100,13 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(isOverlayEnabled = enabled) }
         viewModelScope.launch {
             settingsRepository.setOverlayEnabled(enabled)
+        }
+    }
+
+    fun setAutoPunctuationEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(isAutoPunctuationEnabled = enabled) }
+        viewModelScope.launch {
+            settingsRepository.setAutoPunctuationEnabled(enabled)
         }
     }
 

@@ -88,6 +88,11 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
+    // Room (local database for transcription history)
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+
     // Sherpa-ONNX (local transcription - Parakeet v3 support)
     implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.12")
 
@@ -96,6 +101,12 @@ dependencies {
 
     // Archive extraction (for model downloads)
     implementation("org.apache.commons:commons-compress:1.26.0")
+
+    // Google Mobile Ads (AdMob)
+    implementation("com.google.android.gms:play-services-ads:22.6.0")
+
+    // RevenueCat (subscriptions & monetization)
+    implementation("com.revenuecat.purchases:purchases:8.10.7")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

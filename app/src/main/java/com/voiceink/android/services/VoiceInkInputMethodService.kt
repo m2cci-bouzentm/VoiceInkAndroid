@@ -15,8 +15,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import com.voiceink.android.R
+import com.voiceink.android.data.history.TranscriptionHistoryRepository
 import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.PredefinedModels
+import com.voiceink.android.domain.model.TranscriptionModel
 import com.voiceink.android.domain.transcription.TranscriptionRegistry
 import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.EntryPoint
@@ -53,10 +55,12 @@ class VoiceInkInputMethodService : InputMethodService() {
     interface VoiceInkIMEEntryPoint {
         fun transcriptionRegistry(): TranscriptionRegistry
         fun settingsRepository(): SettingsRepository
+        fun historyRepository(): TranscriptionHistoryRepository
     }
 
     private lateinit var transcriptionRegistry: TranscriptionRegistry
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var historyRepository: TranscriptionHistoryRepository
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -72,6 +76,7 @@ class VoiceInkInputMethodService : InputMethodService() {
     private var micButton: ImageButton? = null
     private var switchButton: TextView? = null
     private var hintText: TextView? = null
+    private var cancelButton: TextView? = null
 
     // Double-tap detection
     private var lastTapTime = 0L
@@ -88,6 +93,7 @@ class VoiceInkInputMethodService : InputMethodService() {
         )
         transcriptionRegistry = entryPoint.transcriptionRegistry()
         settingsRepository = entryPoint.settingsRepository()
+        historyRepository = entryPoint.historyRepository()
 
         Log.d(TAG, "VoiceInk IME created successfully")
     }
@@ -119,6 +125,7 @@ class VoiceInkInputMethodService : InputMethodService() {
         micButton = view.findViewById(R.id.micButton)
         switchButton = view.findViewById(R.id.switchButton)
         hintText = view.findViewById(R.id.hintText)
+        cancelButton = view.findViewById(R.id.cancelButton)
 
         micButton?.setOnClickListener {
             val currentTime = System.currentTimeMillis()
@@ -133,6 +140,23 @@ class VoiceInkInputMethodService : InputMethodService() {
                 Log.d(TAG, "Mic button clicked")
                 toggleRecording()
             }
+        }
+
+        // Long-press on mic button to abort recording
+        micButton?.setOnLongClickListener {
+            if (isRecording) {
+                Log.d(TAG, "Long-press detected, aborting recording")
+                abortRecording()
+                true
+            } else {
+                false
+            }
+        }
+
+        // Cancel button click
+        cancelButton?.setOnClickListener {
+            Log.d(TAG, "Cancel button clicked")
+            abortRecording()
         }
 
         switchButton?.setOnClickListener {
@@ -251,6 +275,10 @@ class VoiceInkInputMethodService : InputMethodService() {
                 when (result) {
                     is TranscriptionResult.Success -> {
                         Log.d(TAG, "Transcription success: ${result.text}")
+
+                        // Save to history before deleting audio file
+                        saveToHistory(result.text, model, audioFile)
+
                         // Insert text into the focused text field
                         currentInputConnection?.commitText(result.text, 1)
                         statusText?.text = "Tap to speak"
@@ -284,16 +312,48 @@ class VoiceInkInputMethodService : InputMethodService() {
                 isProcessing -> {
                     statusText?.text = "Processing..."
                     micButton?.setBackgroundResource(R.drawable.overlay_button_background)
+                    cancelButton?.visibility = View.GONE
+                    hintText?.text = "Please wait..."
                 }
                 isRecording -> {
                     statusText?.text = "Listening... Tap to stop"
                     micButton?.setBackgroundResource(R.drawable.overlay_button_recording)
+                    cancelButton?.visibility = View.VISIBLE
+                    hintText?.text = "Long-press to cancel"
                 }
                 else -> {
                     statusText?.text = "Tap to speak"
                     micButton?.setBackgroundResource(R.drawable.overlay_button_background)
+                    cancelButton?.visibility = View.GONE
+                    hintText?.text = "Double-tap to clear"
                 }
             }
+        }
+    }
+
+    private fun abortRecording() {
+        if (!isRecording) return
+
+        stopRecording()
+        recordedData.clear()
+        isProcessing = false
+        updateUI()
+
+        Toast.makeText(this, "Recording cancelled", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "Recording aborted")
+    }
+
+    private suspend fun saveToHistory(text: String, model: TranscriptionModel, audioFile: File) {
+        try {
+            historyRepository.save(
+                text = text,
+                model = model,
+                audioFile = audioFile,
+                wasStreaming = false,
+                hadAutoPunctuation = false
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save to history", e)
         }
     }
 

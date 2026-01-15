@@ -5,8 +5,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -14,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -41,6 +44,7 @@ import com.voiceink.android.ui.theme.VoiceInkColors
 @Composable
 fun HomeScreen(
     onNavigateToSettings: () -> Unit,
+    onNavigateToHistory: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -77,7 +81,10 @@ fun HomeScreen(
                 .navigationBarsPadding()
         ) {
             // Premium Top Bar
-            PremiumTopBar(onSettingsClick = onNavigateToSettings)
+            PremiumTopBar(
+                onHistoryClick = onNavigateToHistory,
+                onSettingsClick = onNavigateToSettings
+            )
 
             Column(
                 modifier = Modifier
@@ -131,6 +138,9 @@ fun HomeScreen(
                         } else {
                             audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
+                    },
+                    onCancel = {
+                        viewModel.cancelRecording()
                     }
                 )
 
@@ -141,7 +151,10 @@ fun HomeScreen(
 }
 
 @Composable
-private fun PremiumTopBar(onSettingsClick: () -> Unit) {
+private fun PremiumTopBar(
+    onHistoryClick: () -> Unit,
+    onSettingsClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -163,20 +176,40 @@ private fun PremiumTopBar(onSettingsClick: () -> Unit) {
             )
         }
 
-        IconButton(
-            onClick = onSettingsClick,
-            modifier = Modifier
-                .size(48.dp)
-                .background(
-                    color = VoiceInkColors.SurfaceLight,
-                    shape = CircleShape
+        Row {
+            IconButton(
+                onClick = onHistoryClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = VoiceInkColors.SurfaceLight,
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = "History",
+                    tint = VoiceInkColors.TextSecondary
                 )
-        ) {
-            Icon(
-                Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = VoiceInkColors.TextSecondary
-            )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = VoiceInkColors.SurfaceLight,
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = VoiceInkColors.TextSecondary
+                )
+            }
         }
     }
 }
@@ -428,11 +461,13 @@ private fun RecordingAnimation() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PremiumRecordButton(
     isRecording: Boolean,
     isProcessing: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onCancel: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "button")
     
@@ -462,45 +497,42 @@ private fun PremiumRecordButton(
         label = "buttonScale"
     )
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.scale(buttonScale)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Glow effect
-        if (isRecording) {
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .scale(pulseScale)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                VoiceInkColors.Recording.copy(alpha = glowAlpha),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = CircleShape
-                    )
-            )
-        }
-
-        // Main button
-        Surface(
-            onClick = { if (!isProcessing) onClick() },
-            modifier = Modifier
-                .size(88.dp)
-                .shadow(
-                    elevation = if (isRecording) 16.dp else 8.dp,
-                    shape = CircleShape,
-                    ambientColor = if (isRecording) VoiceInkColors.Recording else VoiceInkColors.Primary,
-                    spotColor = if (isRecording) VoiceInkColors.Recording else VoiceInkColors.Primary
-                ),
-            shape = CircleShape,
-            color = Color.Transparent
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.scale(buttonScale)
         ) {
+            // Glow effect
+            if (isRecording) {
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .scale(pulseScale)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    VoiceInkColors.Recording.copy(alpha = glowAlpha),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+            }
+
+            // Main button
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .size(88.dp)
+                    .shadow(
+                        elevation = if (isRecording) 16.dp else 8.dp,
+                        shape = CircleShape,
+                        ambientColor = if (isRecording) VoiceInkColors.Recording else VoiceInkColors.Primary,
+                        spotColor = if (isRecording) VoiceInkColors.Recording else VoiceInkColors.Primary
+                    )
+                    .clip(CircleShape)
                     .background(
                         brush = Brush.linearGradient(
                             colors = if (isRecording) {
@@ -522,6 +554,10 @@ private fun PremiumRecordButton(
                                 )
                             }
                         )
+                    )
+                    .combinedClickable(
+                        onClick = { if (!isProcessing) onClick() },
+                        onLongClick = { if (isRecording) onCancel() }
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -540,6 +576,38 @@ private fun PremiumRecordButton(
                     )
                 }
             }
+        }
+
+        // Cancel text - shown when recording
+        AnimatedVisibility(
+            visible = isRecording,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it }
+        ) {
+            TextButton(
+                onClick = onCancel,
+                modifier = Modifier.padding(top = 12.dp)
+            ) {
+                Text(
+                    text = "Cancel",
+                    color = VoiceInkColors.Error,
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+
+        // Hint text
+        AnimatedVisibility(
+            visible = isRecording,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Text(
+                text = "Long-press to cancel",
+                color = VoiceInkColors.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
     }
 }

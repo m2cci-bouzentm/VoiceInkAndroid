@@ -135,6 +135,31 @@ class AudioRecorder @Inject constructor(
         outputFile
     }
 
+    /**
+     * Cancel recording without processing - discards the audio
+     * @return true if recording was cancelled, false if not recording
+     */
+    suspend fun cancelRecording(): Boolean = withContext(Dispatchers.IO) {
+        if (_state.value != RecordingState.RECORDING) {
+            return@withContext false
+        }
+
+        isRecording = false
+        recordingThread?.join(1000)
+        recordingThread = null
+
+        audioRecord?.stop()
+        audioRecord?.release()
+        audioRecord = null
+
+        // Delete the partial recording file
+        outputFile?.delete()
+        outputFile = null
+
+        _state.value = RecordingState.IDLE
+        true
+    }
+
     private fun writeAudioToFile(file: File, bufferSize: Int) {
         val buffer = ShortArray(bufferSize / 2)
         val audioData = mutableListOf<Short>()

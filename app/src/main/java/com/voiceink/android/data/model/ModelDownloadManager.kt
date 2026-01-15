@@ -59,7 +59,7 @@ class ModelDownloadManager @Inject constructor(
     }
 
     /**
-     * Check if a model is downloaded
+     * Check if a model is downloaded (LocalModel)
      */
     fun isModelDownloaded(model: LocalModel): Boolean {
         val modelDir = getModelDirectory(model)
@@ -249,7 +249,7 @@ class ModelDownloadManager @Inject constructor(
             else -> 0L
         }
     }
-    
+
     /**
      * Get human-readable model size
      */
