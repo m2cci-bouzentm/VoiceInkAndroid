@@ -43,7 +43,8 @@ data class ModelBenchmark(
     val werDataset: String? = null,
     val paramsM: Int? = null,
     val rtfx: Double? = null,
-    val relativeLatency: Double? = null
+    val relativeLatency: Double? = null,
+    val avgSecPerFile: Double? = null
 )
 
 /**
@@ -79,6 +80,16 @@ object ModelScoring {
                 rel >= 4.0 -> 4
                 rel >= 2.0 -> 3
                 rel >= 1.0 -> 2
+                else -> 1
+            }
+        }
+
+        benchmark?.avgSecPerFile?.let { seconds ->
+            return when {
+                seconds <= 5.0 -> 5
+                seconds <= 10.0 -> 4
+                seconds <= 20.0 -> 3
+                seconds <= 40.0 -> 2
                 else -> 1
             }
         }
@@ -139,8 +150,12 @@ data class CloudModel(
  * - Whisper params table (all Whisper sizes): https://huggingface.co/openai/whisper
  * - Distil Whisper Large v3 WER (LibriSpeech validation-clean) + params + rel. latency:
  *   https://huggingface.co/distil-whisper/distil-large-v3
- * - Parakeet TDT 0.6B WER (LibriSpeech test-clean) + params + RTFx:
- *   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2
+ * - Parakeet v3 + cloud models (Gemini/OpenAI) medical benchmark:
+ *   https://www.omi.me/blogs/voice-llm-benchmark
+ * - Parakeet v3 model details (size/languages):
+ *   https://k2-fsa.github.io/sherpa/onnx/pretrained_models/parakeet.html
+ * - Whisper large-v2 model card (reference for OpenAI Whisper API context):
+ *   https://huggingface.co/openai/whisper-large-v2
  *
  * UI uses coarse 1–5 bins (see ModelScoring) derived from these metrics.
  */
@@ -149,14 +164,14 @@ object PredefinedModels {
     // ==================== LOCAL MODELS (On-Device, Private) ====================
     
     // Whisper Tiny - Fastest, English only
-    // Benchmark: WER 5.66% LibriSpeech clean (HuggingFace)
+    // Benchmark: WER 8.437% LibriSpeech test-clean (HuggingFace)
     val whisperTinyEn = LocalModel(
         id = "whisper-tiny-en",
         name = "Whisper Tiny",
         description = "English only, 39M params",
         badge = ModelBadge.FASTEST,
         benchmark = ModelBenchmark(
-            wer = 5.655609406528749,
+            wer = 8.437,
             werDataset = "LibriSpeech test-clean",
             paramsM = 39
         ),
@@ -166,38 +181,35 @@ object PredefinedModels {
         downloadSizeMB = 40
     )
     
-    // Parakeet TDT 0.6B - Best for English
-    // Benchmark: WER 1.69% LibriSpeech clean, RTFx 3380 (NVIDIA HuggingFace)
-    // BROKEN: sherpa-onnx v3 export missing vocab_size metadata in decoder.int8.onnx
-    // Issue: https://github.com/k2-fsa/sherpa-onnx/issues - runtime reads vocab_size from decoder, 
-    // but export script (PR #2500) only added it to encoder. Causes SIGABRT crash.
+    // Parakeet TDT 0.6B v3 - Multilingual (25 languages)
+    // Benchmarks: Omi Voice LLM Benchmark (PriMock57 medical set)
+    // Model details from sherpa-onnx Parakeet page
     val parakeetTdt = LocalModel(
         id = "parakeet-tdt-0.6b",
         name = "Parakeet TDT 0.6B",
-        description = "NVIDIA, WER 1.69%",
-        badge = ModelBadge.ENGLISH_BEST,
+        description = "NVIDIA, 25 languages",
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
-            wer = 1.69,
-            werDataset = "LibriSpeech test-clean",
+            wer = 11.9,
+            werDataset = "PriMock57 (medical)",
             paramsM = 600,
-            rtfx = 3380.0
+            avgSecPerFile = 6.0
         ),
         modelPath = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
-        language = "en",
+        language = "auto",
         modelType = "transducer",
-        downloadSizeMB = 490,
-        isBroken = true  // Missing decoder metadata, crashes on Android
+        downloadSizeMB = 640
     )
     
     // Whisper Small - Multilingual, smaller download
-    // Benchmark: WER 3.43% LibriSpeech clean (OpenAI/HuggingFace)
+    // Benchmark: WER 3.432% LibriSpeech test-clean (OpenAI/HuggingFace)
     val whisperSmall = LocalModel(
         id = "whisper-small",
         name = "Whisper Small",
         description = "99+ languages, 244M params",
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
-            wer = 3.432213777886737,
+            wer = 3.432,
             werDataset = "LibriSpeech test-clean",
             paramsM = 244
         ),
@@ -208,16 +220,16 @@ object PredefinedModels {
         supportsLanguageSelection = true
     )
     
-    // Distil Whisper Large v3 - Fast & accurate multilingual
-    // Benchmark: WER 2.43% LibriSpeech clean, 6.3x faster than large-v3 (HuggingFace)
+    // Distil Whisper Large v3 - Fast & accurate English
+    // Benchmark: Short-form WER 9.7, 6.3x rel. latency (Distil-Whisper model card)
     val distilWhisperLargeV3 = LocalModel(
         id = "distil-whisper-large-v3",
         name = "Distil Whisper Large v3",
         description = "99+ langs, 6.3x faster",
         badge = ModelBadge.RECOMMENDED,
         benchmark = ModelBenchmark(
-            wer = 2.428920763531516,
-            werDataset = "LibriSpeech validation-clean",
+            wer = 9.7,
+            werDataset = "Short-form (model card)",
             paramsM = 756,
             relativeLatency = 6.3
         ),
@@ -255,6 +267,11 @@ object PredefinedModels {
         name = "Gemini 2.5 Flash",
         description = "Google AI, latest model",
         badge = ModelBadge.FASTEST,
+        benchmark = ModelBenchmark(
+            wer = 12.1,
+            werDataset = "PriMock57 (medical)",
+            avgSecPerFile = 20.0
+        ),
         provider = ModelProvider.GEMINI,
         modelIdentifier = "gemini-2.5-flash"
     )
@@ -264,6 +281,11 @@ object PredefinedModels {
         name = "OpenAI Whisper",
         description = "Industry standard API",
         badge = ModelBadge.MOST_ACCURATE,
+        benchmark = ModelBenchmark(
+            wer = 15.5,
+            werDataset = "PriMock57 (medical)",
+            avgSecPerFile = 104.0
+        ),
         provider = ModelProvider.OPENAI,
         modelIdentifier = "whisper-1"
     )

@@ -151,11 +151,11 @@ app/src/main/
    - Model path: `whisper-tiny-en`
    - Download: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2
 
-4. **Parakeet TDT v3** - BROKEN (crashes with SIGABRT)
-   - 600M parameter model (int8 quantized ~150MB)
-   - Model ID: `parakeet-tdt-v3`
-   - **Status:** Marked as broken in app, excluded from model list
-   - Crashes on Android despite featureDim=128 fix
+4. **Parakeet TDT 0.6B v3** - MULTILINGUAL (25 languages)
+   - ~640MB int8 model (sherpa-onnx export)
+   - Model ID: `parakeet-tdt-0.6b`
+   - Model path: `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
+   - Download: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2
 
 ### Cloud (Fully Working)
 1. **Gemini 2.5 Flash** (gemini-2.5-flash) - DEFAULT
@@ -218,28 +218,35 @@ app/src/main/
 Each model now shows **Accuracy** and **Speed** bars in Settings using published benchmarks only.
 
 **Benchmarks + Sources**
-- Whisper Tiny EN: WER 5.6556 (LibriSpeech test-clean), 39M params  
+- Whisper Tiny EN: WER 8.437 (LibriSpeech test-clean), 39M params  
   https://huggingface.co/openai/whisper-tiny.en  
-- Whisper Small: WER 3.4322 (LibriSpeech test-clean), 244M params  
+- Whisper Small: WER 3.432 (LibriSpeech test-clean), 244M params  
   https://huggingface.co/openai/whisper-small  
 - Whisper Medium: WER 2.9004 (LibriSpeech test-clean), 769M params  
   https://huggingface.co/openai/whisper-medium  
 - Whisper param table (all sizes):  
   https://huggingface.co/openai/whisper  
-- Distil Whisper Large v3: WER 2.4289 (LibriSpeech validation-clean), 756M params, rel. latency 6.3x  
+- Distil Whisper Large v3: Short-form WER 9.7, 756M params, rel. latency 6.3x  
   https://huggingface.co/distil-whisper/distil-large-v3  
-- Parakeet TDT 0.6B: WER 1.69 (LibriSpeech test-clean), 600M params, RTFx 3380  
-  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2  
+- Parakeet TDT 0.6B v3 (Omi benchmark): WER 11.9 (PriMock57 medical), avg 6.0s/file  
+  https://www.omi.me/blogs/voice-llm-benchmark  
+- Gemini 2.5 Flash (Omi benchmark): WER 12.1 (PriMock57 medical), avg 20.0s/file  
+  https://www.omi.me/blogs/voice-llm-benchmark  
+- OpenAI Whisper (Omi benchmark): WER 15.5 (PriMock57 medical), avg 104.0s/file  
+  https://www.omi.me/blogs/voice-llm-benchmark  
+- Parakeet v3 model details (size/languages):  
+  https://k2-fsa.github.io/sherpa/onnx/pretrained_models/parakeet.html  
 
 **Scoring (UI bins, not a claim of precise ranking)**
 - Accuracy uses WER bins (lower is better): `<=2.0 → 5`, `<=3.0 → 4`, `<=4.5 → 3`, `<=7.0 → 2`, else `1`.
 - Speed uses: `RTFx` if available, else `relative latency`, else `paramsM`.
   - RTFx bins: `>=1000 → 5`, `>=100 → 4`, `>=10 → 3`, `>=1 → 2`, else `1`.
   - Relative latency bins: `>=6 → 5`, `>=4 → 4`, `>=2 → 3`, `>=1 → 2`, else `1`.
+  - Avg sec/file bins: `<=5s → 5`, `<=10s → 4`, `<=20s → 3`, `<=40s → 2`, else `1`.
   - Params bins: `<=50M → 5`, `<=250M → 4`, `<=800M → 3`, `<=1200M → 2`, else `1`.
 
 **Cloud models**
-- No published WER/RTFx benchmarks are stored in code, so bars show `N/A`.
+- Gemini 2.0 Flash has no reliable public benchmark in code, so bars show `N/A`.
 
 ### Local Model Status
 - Model definitions added to `TranscriptionModel.kt`
@@ -440,6 +447,10 @@ val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
 ```
 
 **Tip:** Always check the model's metadata in logcat (`feat_dim=X`) to determine correct feature dimension.
+
+### Issue 15: Parakeet v3 Re-enabled
+**Symptom:** Parakeet was previously disabled due to export metadata issues.
+**Update:** Re-enabled Parakeet v3 using the official sherpa-onnx v3 int8 export and updated size/language metadata.
 
 ### Issue 11: Free 5-Minute Limit Blocks Debug Testing
 **Symptom:** Debug builds hit the free-tier 5‑minute cloud limit while testing.

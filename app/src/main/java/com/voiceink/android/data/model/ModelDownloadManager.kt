@@ -274,7 +274,7 @@ class ModelDownloadManager @Inject constructor(
     fun getModelSize(model: LocalModel): Long {
         return when (model.id) {
             "whisper-tiny-en" -> 40_000_000L // ~40MB
-            "parakeet-tdt-0.6b" -> 490_000_000L // ~490MB (int8 quantized)
+            "parakeet-tdt-0.6b" -> 640_000_000L // ~640MB (int8 quantized)
             "whisper-small" -> 460_000_000L // ~460MB
             "distil-whisper-large-v3" -> 1_000_000_000L // ~1GB
             "whisper-medium" -> 1_500_000_000L // ~1.5GB

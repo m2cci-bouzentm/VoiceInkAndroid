@@ -845,6 +845,10 @@ private fun formatSpeedDetail(benchmark: ModelBenchmark?): String {
         val text = String.format(Locale.US, "%.1f", rel)
         return "Rel. latency ${text}x"
     }
+    benchmark?.avgSecPerFile?.let { seconds ->
+        val text = String.format(Locale.US, "%.1f", seconds)
+        return "Avg ${text}s/file"
+    }
     benchmark?.paramsM?.let { params ->
         return "Params ${params}M"
     }
