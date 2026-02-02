@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
@@ -63,6 +65,7 @@ class OverlayService : Service() {
 
         const val ACTION_START_SERVICE = "com.voiceink.android.START_OVERLAY"
         const val ACTION_STOP_SERVICE = "com.voiceink.android.STOP_OVERLAY"
+        const val ACTION_TOGGLE_RECORDING = "com.voiceink.android.TOGGLE_RECORDING"
 
         private var instance: OverlayService? = null
 
@@ -140,12 +143,31 @@ class OverlayService : Service() {
             abortRecording()
         }
     }
+    
+    // Broadcast receiver for volume button shortcut
+    private val toggleRecordingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_TOGGLE_RECORDING) {
+                Log.d(TAG, "Received toggle recording broadcast from volume shortcut")
+                toggleRecording()
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
+        
+        // Register broadcast receiver for volume shortcut
+        val filter = IntentFilter(ACTION_TOGGLE_RECORDING)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(toggleRecordingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(toggleRecordingReceiver, filter)
+        }
+        
         Log.d(TAG, "OverlayService created")
     }
 
@@ -170,15 +192,25 @@ class OverlayService : Service() {
     private fun startForegroundWithNotification() {
         val notification = createNotification()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val serviceType = if (audioRecorder.hasPermission()) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                } else {
+                    0
+                }
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    notification,
+                    serviceType
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service", e)
+            stopSelf()
         }
     }
 
@@ -339,7 +371,17 @@ class OverlayService : Service() {
     private fun toggleRecording() {
         serviceScope.launch {
             when (audioRecorder.state.value) {
-                RecordingState.IDLE -> startRecording()
+                RecordingState.IDLE -> {
+                    if (!audioRecorder.hasPermission()) {
+                        Toast.makeText(
+                            this@OverlayService,
+                            "Microphone permission required",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        startRecording()
+                    }
+                }
                 RecordingState.RECORDING -> stopRecordingAndTranscribe()
                 RecordingState.PROCESSING -> { /* Do nothing while processing */ }
             }
@@ -531,6 +573,14 @@ class OverlayService : Service() {
         instance = null
         removeOverlay()
         serviceScope.cancel()
+        
+        // Unregister broadcast receiver
+        try {
+            unregisterReceiver(toggleRecordingReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "Receiver already unregistered", e)
+        }
+        
         Log.d(TAG, "OverlayService destroyed")
     }
 }

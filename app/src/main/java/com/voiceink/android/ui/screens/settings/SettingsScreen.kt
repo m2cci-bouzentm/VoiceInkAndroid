@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,18 +35,32 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.voiceink.android.data.model.DownloadState
+import com.voiceink.android.domain.model.CloudModel
+import com.voiceink.android.domain.model.Language
 import com.voiceink.android.domain.model.LocalModel
+import com.voiceink.android.domain.model.ModelBadge
 import com.voiceink.android.domain.model.ModelProvider
+import com.voiceink.android.domain.model.ModelScoring
+import com.voiceink.android.domain.model.ModelBenchmark
 import com.voiceink.android.domain.model.PredefinedModels
 import com.voiceink.android.domain.model.TranscriptionModel
+import com.voiceink.android.domain.model.WhisperLanguages
+import androidx.compose.material.icons.outlined.Language
 import com.voiceink.android.services.OverlayService
 import com.voiceink.android.services.TextInjectionService
 import com.voiceink.android.ui.theme.VoiceInkColors
@@ -55,9 +70,13 @@ import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.PopupProperties
+import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -73,7 +92,32 @@ fun SettingsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
     var showProModal by remember { mutableStateOf(false) }
+    var pendingLargeModelDownload by remember { mutableStateOf<LocalModel?>(null) }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasMicPermission = granted
+        if (granted) {
+            viewModel.setOverlayEnabled(true)
+            OverlayService.start(context)
+        } else {
+            Toast.makeText(
+                context,
+                "Microphone permission required for floating button",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     // Pro Features Modal
     if (showProModal) {
@@ -86,11 +130,30 @@ fun SettingsScreen(
         )
     }
 
+    // Large Model Download Warning Dialog
+    pendingLargeModelDownload?.let { model ->
+        LargeModelDownloadDialog(
+            model = model,
+            modelSize = viewModel.getModelSize(model),
+            onConfirm = {
+                viewModel.downloadModel(model)
+                pendingLargeModelDownload = null
+            },
+            onDismiss = {
+                pendingLargeModelDownload = null
+            }
+        )
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshAccessibilityStatus()
                 hasOverlayPermission = Settings.canDrawOverlays(context)
+                hasMicPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
                 
                 if (uiState.isOverlayEnabled && hasOverlayPermission) {
                     OverlayService.start(context)
@@ -103,65 +166,143 @@ fun SettingsScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(VoiceInkColors.Background)
-    ) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Settings",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.Outlined.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = VoiceInkColors.Background,
+                    titleContentColor = VoiceInkColors.TextPrimary,
+                    navigationIconContentColor = VoiceInkColors.TextPrimary
+                )
+            )
+        },
+        containerColor = VoiceInkColors.Background
+    ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .padding(paddingValues),
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            // Header
+            // Usage Card (compact)
             item {
-                SettingsHeader(onBackClick = onNavigateBack)
-            }
-
-            // Usage & Subscription Section
-            item {
-                SectionHeader(
-                    title = "Usage & Subscription",
-                    icon = Icons.Outlined.Star
-                )
-            }
-
-            item {
-                UsageCard(
+                CompactUsageCard(
                     subscriptionTier = uiState.subscriptionTier,
                     localMinutesUsed = uiState.usageStats.localMinutesUsed,
                     cloudMinutesUsed = uiState.usageStats.cloudMinutesUsed,
-                    lastResetTimestamp = uiState.usageStats.lastResetTimestamp,
                     onUpgradeClick = { showProModal = true }
                 )
             }
 
-            // Features Section
+            // Transcription Model Section
             item {
-                SectionHeader(
-                    title = "Features",
-                    icon = Icons.Outlined.TouchApp
+                SectionHeader(title = "Transcription Model")
+            }
+
+            items(PredefinedModels.featuredModels.filter { 
+                // Filter out broken models
+                it !is LocalModel || !it.isBroken
+            }) { model ->
+                val isLocalModel = model is LocalModel
+                val modelSize = if (model is LocalModel) viewModel.getModelSize(model) else 0L
+                
+                val hasRequiredApiKey = when {
+                    model is CloudModel && model.provider == ModelProvider.GEMINI -> uiState.geminiApiKey.isNotBlank()
+                    model is CloudModel && model.provider == ModelProvider.OPENAI -> uiState.openaiApiKey.isNotBlank()
+                    else -> true
+                }
+                val isPro = uiState.subscriptionTier == SubscriptionTier.PRO
+                val canUseCloudModel = hasRequiredApiKey || isPro
+                
+                ModelItem(
+                    model = model,
+                    isSelected = model.id == uiState.selectedModelId,
+                    isDownloaded = model.id in uiState.downloadedModels,
+                    downloadState = uiState.downloadStates[model.id] ?: DownloadState.Idle,
+                    isEnabled = if (model is CloudModel) canUseCloudModel else true,
+                    onClick = {
+                        val canSelect = when {
+                            isLocalModel -> model.id in uiState.downloadedModels
+                            model is CloudModel -> canUseCloudModel
+                            else -> true
+                        }
+                        if (canSelect) {
+                            viewModel.selectModel(model.id)
+                        }
+                    },
+                    onDownloadClick = {
+                        if (model is LocalModel) {
+                            if (modelSize > 500_000_000L) {
+                                pendingLargeModelDownload = model
+                            } else {
+                                viewModel.downloadModel(model)
+                            }
+                        }
+                    },
+                    onDeleteClick = {
+                        if (model is LocalModel) viewModel.deleteModel(model)
+                    }
                 )
             }
 
+            // Language Selection
+            val selectedModel = PredefinedModels.allModels.find { it.id == uiState.selectedModelId }
+            val showLanguageSelector = when (selectedModel) {
+                is LocalModel -> selectedModel.supportsLanguageSelection
+                is CloudModel -> true
+                else -> false
+            }
+            if (showLanguageSelector) {
+                item {
+                    SectionHeader(title = "Language")
+                }
+
+                item {
+                    LanguageSelector(
+                        selectedLanguageCode = uiState.selectedLanguage,
+                        onLanguageSelected = { viewModel.setSelectedLanguage(it.code) }
+                    )
+                }
+            }
+
+            // Features Section
             item {
-                SettingsCard {
-                    FeatureToggleItem(
+                SectionHeader(title = "Features")
+            }
+
+            item {
+                SettingsGroup {
+                    SettingsToggleRow(
                         title = "Floating Button",
-                        description = if (uiState.isOverlayEnabled && hasOverlayPermission)
-                            "Record from any app with one tap"
-                        else if (!hasOverlayPermission)
-                            "Requires overlay permission"
-                        else
-                            "Show floating record button",
-                        isEnabled = uiState.isOverlayEnabled && hasOverlayPermission,
-                        onToggle = { enabled ->
+                        subtitle = when {
+                            uiState.isOverlayEnabled && hasOverlayPermission -> "Enabled"
+                            !hasOverlayPermission -> "Tap to grant permission"
+                            else -> "Record from any app"
+                        },
+                        isChecked = uiState.isOverlayEnabled && hasOverlayPermission,
+                        onCheckedChange = { enabled ->
                             if (enabled) {
                                 if (hasOverlayPermission) {
-                                    viewModel.setOverlayEnabled(true)
-                                    OverlayService.start(context)
+                                    if (hasMicPermission) {
+                                        viewModel.setOverlayEnabled(true)
+                                        OverlayService.start(context)
+                                    } else {
+                                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
                                 } else {
                                     val intent = Intent(
                                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -176,369 +317,356 @@ fun SettingsScreen(
                         }
                     )
                     
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = VoiceInkColors.GlassBorder
+                    SettingsDivider()
+                    
+                    SettingsNavigationRow(
+                        title = "Text Injection",
+                        subtitle = if (uiState.isAccessibilityEnabled) "Enabled" else "Setup required",
+                        showChevron = !uiState.isAccessibilityEnabled,
+                        trailing = if (uiState.isAccessibilityEnabled) {
+                            {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = VoiceInkColors.Success,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        } else null,
+                        onClick = { TextInjectionService.openAccessibilitySettings(context) }
                     )
                     
-                    FeatureToggleItem(
-                        title = "Text Injection",
-                        description = if (uiState.isAccessibilityEnabled)
-                            "Auto-insert text at cursor"
-                        else
-                            "Enable accessibility service",
-                        isEnabled = uiState.isAccessibilityEnabled,
-                        showButton = !uiState.isAccessibilityEnabled,
-                        buttonText = "Setup",
-                        onButtonClick = { TextInjectionService.openAccessibilitySettings(context) },
-                        onToggle = {}
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = VoiceInkColors.GlassBorder
-                    )
-
-                    FeatureToggleItem(
+                    SettingsDivider()
+                    
+                    SettingsToggleRow(
                         title = "Auto-Punctuation",
-                        description = if (uiState.geminiApiKey.isBlank() && uiState.subscriptionTier != SubscriptionTier.PRO)
-                            "Requires Gemini API key or Pro subscription"
-                        else
-                            "Uses Gemini to add punctuation & formatting",
-                        isEnabled = uiState.isAutoPunctuationEnabled &&
-                            (uiState.geminiApiKey.isNotBlank() || uiState.subscriptionTier == SubscriptionTier.PRO),
-                        onToggle = { enabled ->
-                            if (uiState.geminiApiKey.isNotBlank() || uiState.subscriptionTier == SubscriptionTier.PRO) {
-                                viewModel.setAutoPunctuationEnabled(enabled)
-                            }
-                        }
+                        subtitle = if (uiState.geminiApiKey.isBlank()) "Requires Gemini API key" else "AI-powered formatting",
+                        infoText = "Runs after local model transcriptions. Uses Gemini 2.0 Flash to add punctuation and capitalization. Requires a Gemini API key; if missing or it fails, text stays unchanged. Cloud models skip this step.",
+                        isChecked = uiState.isAutoPunctuationEnabled && uiState.geminiApiKey.isNotBlank(),
+                        enabled = uiState.geminiApiKey.isNotBlank() || uiState.subscriptionTier == SubscriptionTier.PRO,
+                        onCheckedChange = { viewModel.setAutoPunctuationEnabled(it) }
                     )
                 }
-            }
-
-            // Models Section
-            item {
-                SectionHeader(
-                    title = "Transcription Models",
-                    icon = Icons.Outlined.Memory
-                )
-            }
-
-            items(PredefinedModels.allModels) { model ->
-                val isLocalModel = model is LocalModel
-                ModelCard(
-                    model = model,
-                    isSelected = model.id == uiState.selectedModelId,
-                    isDownloaded = model.id in uiState.downloadedModels,
-                    downloadState = uiState.downloadStates[model.id] ?: DownloadState.Idle,
-                    onClick = {
-                        if (!isLocalModel || model.id in uiState.downloadedModels) {
-                            viewModel.selectModel(model.id)
-                        }
-                    },
-                    onDownloadClick = {
-                        if (model is LocalModel) viewModel.downloadModel(model)
-                    },
-                    onDeleteClick = {
-                        if (model is LocalModel) viewModel.deleteModel(model)
-                    },
-                    modelSize = if (model is LocalModel) viewModel.getModelSize(model) else 0L
-                )
             }
 
             // API Keys Section
             item {
-                SectionHeader(
-                    title = "API Keys",
-                    icon = Icons.Outlined.Key
-                )
+                SectionHeader(title = "API Keys")
             }
 
             item {
-                SettingsCard {
-                    PremiumApiKeyField(
-                        label = "Gemini API Key",
+                SettingsGroup {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ApiKeyField(
+                        label = "Gemini",
                         value = uiState.geminiApiKey,
                         onValueChange = viewModel::setGeminiApiKey,
-                        placeholder = "Enter your Gemini API key"
+                        placeholder = "Enter API key"
                     )
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    PremiumApiKeyField(
-                        label = "OpenAI API Key",
+                    ApiKeyField(
+                        label = "OpenAI",
                         value = uiState.openaiApiKey,
                         onValueChange = viewModel::setOpenaiApiKey,
-                        placeholder = "Enter your OpenAI API key"
+                        placeholder = "Enter API key"
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
 
-            // Info Card
+            // Get API Keys hint
             item {
-                InfoCard()
+                Text(
+                    text = "Get keys: aistudio.google.com • platform.openai.com",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = VoiceInkColors.TextMuted,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                )
             }
         }
     }
 }
 
-@Composable
-private fun SettingsHeader(onBackClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(
-            onClick = onBackClick,
-            modifier = Modifier
-                .size(44.dp)
-                .background(VoiceInkColors.SurfaceLight, CircleShape)
-        ) {
-            Icon(
-                Icons.Outlined.ArrowBack,
-                contentDescription = "Back",
-                tint = VoiceInkColors.TextSecondary
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = VoiceInkColors.TextPrimary
-        )
-    }
-}
+// ============================================
+// SECTION HEADER
+// ============================================
 
 @Composable
-private fun SectionHeader(
-    title: String,
-    icon: ImageVector
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = VoiceInkColors.Primary,
-            modifier = Modifier.size(20.dp)
+private fun SectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = VoiceInkColors.TextMuted,
+        letterSpacing = 0.5.sp,
+        modifier = Modifier.padding(
+            start = 20.dp,
+            end = 20.dp,
+            top = 24.dp,
+            bottom = 8.dp
         )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = VoiceInkColors.Primary
-        )
-    }
+    )
 }
 
+// ============================================
+// SETTINGS GROUP (Card wrapper)
+// ============================================
+
 @Composable
-private fun SettingsCard(
+private fun SettingsGroup(
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .border(1.dp, VoiceInkColors.GlassBorder, RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = VoiceInkColors.Surface)
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = VoiceInkColors.Surface,
+        tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(vertical = 4.dp),
             content = content
         )
     }
 }
 
 @Composable
-private fun FeatureToggleItem(
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = VoiceInkColors.GlassBorder.copy(alpha = 0.5f)
+    )
+}
+
+// ============================================
+// SETTINGS ROWS
+// ============================================
+
+@Composable
+private fun SettingsToggleRow(
     title: String,
-    description: String,
-    isEnabled: Boolean,
-    showButton: Boolean = false,
-    buttonText: String = "",
-    onButtonClick: () -> Unit = {},
-    onToggle: (Boolean) -> Unit
+    subtitle: String,
+    isChecked: Boolean,
+    enabled: Boolean = true,
+    infoText: String? = null,
+    onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .clickable(enabled = enabled) { onCheckedChange(!isChecked) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (enabled) VoiceInkColors.TextPrimary else VoiceInkColors.TextMuted
+                )
+                if (infoText != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    InfoTooltip(text = infoText)
+                }
+            }
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = VoiceInkColors.TextMuted
+            )
+        }
+        
+        Switch(
+            checked = isChecked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = VoiceInkColors.Primary,
+                uncheckedThumbColor = VoiceInkColors.TextMuted,
+                uncheckedTrackColor = VoiceInkColors.SurfaceBright
+            )
+        )
+    }
+}
+
+@Composable
+private fun SettingsNavigationRow(
+    title: String,
+    subtitle: String,
+    showChevron: Boolean = true,
+    trailing: @Composable (() -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = VoiceInkColors.TextPrimary,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.bodyLarge,
+                color = VoiceInkColors.TextPrimary
             )
             Text(
-                text = description,
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = VoiceInkColors.TextMuted
             )
         }
         
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        if (showButton) {
-            Surface(
-                onClick = onButtonClick,
-                shape = RoundedCornerShape(12.dp),
-                color = VoiceInkColors.Primary
-            ) {
-                Text(
-                    text = buttonText,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        } else {
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = VoiceInkColors.Primary,
-                    uncheckedThumbColor = VoiceInkColors.TextMuted,
-                    uncheckedTrackColor = VoiceInkColors.SurfaceBright
-                )
+        if (trailing != null) {
+            trailing()
+        } else if (showChevron) {
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = VoiceInkColors.TextMuted,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
 }
 
+// ============================================
+// MODEL ITEM (Simplified)
+// ============================================
+
 @Composable
-private fun ModelCard(
+private fun ModelItem(
     model: TranscriptionModel,
     isSelected: Boolean,
     isDownloaded: Boolean,
     downloadState: DownloadState,
+    isEnabled: Boolean = true,
     onClick: () -> Unit,
     onDownloadClick: () -> Unit,
-    onDeleteClick: () -> Unit,
-    modelSize: Long
+    onDeleteClick: () -> Unit
 ) {
     val isLocalModel = model is LocalModel
     val isDownloading = downloadState is DownloadState.Downloading || downloadState is DownloadState.Extracting
-    val canSelect = !isLocalModel || isDownloaded
+    val canSelect = isEnabled && (!isLocalModel || isDownloaded)
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) VoiceInkColors.Primary else VoiceInkColors.GlassBorder,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .clickable(enabled = canSelect, onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                VoiceInkColors.Primary.copy(alpha = 0.1f)
-            else
-                VoiceInkColors.Surface
-        )
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = when {
+            isSelected -> VoiceInkColors.Primary.copy(alpha = 0.1f)
+            else -> VoiceInkColors.Surface
+        },
+        tonalElevation = if (isSelected) 0.dp else 1.dp,
+        onClick = { if (canSelect) onClick() }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Model icon
+            // Provider icon
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(40.dp)
                     .background(
-                        color = when {
-                            model.provider == ModelProvider.LOCAL -> VoiceInkColors.Secondary.copy(alpha = 0.2f)
-                            model.provider == ModelProvider.GEMINI -> Color(0xFF4285F4).copy(alpha = 0.2f)
-                            model.provider == ModelProvider.OPENAI -> Color(0xFF10A37F).copy(alpha = 0.2f)
-                            else -> VoiceInkColors.SurfaceLight
+                        color = when (model.provider) {
+                            ModelProvider.LOCAL -> VoiceInkColors.Secondary.copy(alpha = 0.15f)
+                            ModelProvider.GEMINI -> Color(0xFF4285F4).copy(alpha = 0.15f)
+                            ModelProvider.OPENAI -> Color(0xFF10A37F).copy(alpha = 0.15f)
                         },
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(10.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isLocalModel) Icons.Outlined.Memory else Icons.Outlined.Cloud,
                     contentDescription = null,
-                    tint = when {
-                        model.provider == ModelProvider.LOCAL -> VoiceInkColors.Secondary
-                        model.provider == ModelProvider.GEMINI -> Color(0xFF4285F4)
-                        model.provider == ModelProvider.OPENAI -> Color(0xFF10A37F)
-                        else -> VoiceInkColors.TextMuted
+                    tint = when (model.provider) {
+                        ModelProvider.LOCAL -> VoiceInkColors.Secondary
+                        ModelProvider.GEMINI -> Color(0xFF4285F4)
+                        ModelProvider.OPENAI -> Color(0xFF10A37F)
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
+            // Model info
             Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = model.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isEnabled) VoiceInkColors.TextPrimary else VoiceInkColors.TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    if (model.badge != ModelBadge.NONE) {
+                        SmallBadge(badge = model.badge)
+                    }
+                }
+                
                 Text(
-                    text = model.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = VoiceInkColors.TextPrimary,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = when {
-                        model.provider == ModelProvider.LOCAL -> if (modelSize > 0) "Offline • ${formatSize(modelSize)}" else "Offline"
-                        model.provider == ModelProvider.GEMINI -> "Google Cloud"
-                        model.provider == ModelProvider.OPENAI -> "OpenAI Cloud"
-                        else -> ""
-                    },
+                    text = model.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = VoiceInkColors.TextMuted
+                    color = VoiceInkColors.TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                ModelMetricRow(
+                    label = "Accuracy",
+                    score = ModelScoring.accuracyScore(model.benchmark),
+                    detail = formatAccuracyDetail(model.benchmark),
+                    barColor = Color(0xFFFFB800)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                ModelMetricRow(
+                    label = "Speed",
+                    score = ModelScoring.speedScore(model.benchmark),
+                    detail = formatSpeedDetail(model.benchmark),
+                    barColor = VoiceInkColors.Success
                 )
 
                 // Download progress
-                AnimatedVisibility(visible = isDownloading) {
-                    Column {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = {
-                                if (downloadState is DownloadState.Downloading)
-                                    downloadState.progress / 100f
-                                else 0f
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp)),
-                            color = VoiceInkColors.Primary,
-                            trackColor = VoiceInkColors.SurfaceBright
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (downloadState is DownloadState.Downloading)
-                                "Downloading ${downloadState.progress}%"
-                            else "Extracting...",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = VoiceInkColors.Primary
-                        )
-                    }
+                if (isDownloading) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = {
+                            if (downloadState is DownloadState.Downloading)
+                                downloadState.progress / 100f
+                            else 0f
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = VoiceInkColors.Primary,
+                        trackColor = VoiceInkColors.SurfaceBright
+                    )
                 }
 
                 if (downloadState is DownloadState.Error) {
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = downloadState.message,
                         style = MaterialTheme.typography.labelSmall,
@@ -547,51 +675,55 @@ private fun ModelCard(
                 }
             }
 
-            // Actions - show for local models only
-            if (isLocalModel) {
-                when {
-                    isDownloading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = VoiceInkColors.Primary
+            // Action button
+            when {
+                isDownloading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = VoiceInkColors.Primary
+                    )
+                }
+                isLocalModel && !isDownloaded -> {
+                    IconButton(
+                        onClick = onDownloadClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = "Download",
+                            tint = VoiceInkColors.Primary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    isDownloaded -> {
-                        IconButton(onClick = onDeleteClick) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = VoiceInkColors.Error
-                            )
-                        }
-                    }
-                    else -> {
-                        IconButton(onClick = onDownloadClick) {
-                            Icon(
-                                Icons.Default.Download,
-                                contentDescription = "Download",
-                                tint = VoiceInkColors.Primary
-                            )
-                        }
+                }
+                isLocalModel && isDownloaded && !isSelected -> {
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = VoiceInkColors.TextMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
-            }
-
-            if (isSelected) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .background(VoiceInkColors.Primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = "Selected",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
+                isSelected -> {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(VoiceInkColors.Primary, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
         }
@@ -599,7 +731,275 @@ private fun ModelCard(
 }
 
 @Composable
-private fun PremiumApiKeyField(
+private fun SmallBadge(badge: ModelBadge) {
+    val (text, color) = when (badge) {
+        ModelBadge.FASTEST -> "Fast" to VoiceInkColors.Success
+        ModelBadge.RECOMMENDED -> "Best" to VoiceInkColors.Primary
+        ModelBadge.MOST_ACCURATE -> "Accurate" to Color(0xFFFFB800)
+        ModelBadge.ENGLISH_BEST -> "EN" to VoiceInkColors.Secondary
+        ModelBadge.NONE -> return
+    }
+    
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = color.copy(alpha = 0.15f)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            color = color,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun ModelMetricRow(
+    label: String,
+    score: Int?,
+    detail: String,
+    barColor: Color
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = VoiceInkColors.TextMuted,
+                modifier = Modifier.width(64.dp)
+            )
+
+            MetricBar(
+                score = score,
+                barColor = barColor,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = score?.let { "$it/5" } ?: "N/A",
+                style = MaterialTheme.typography.labelSmall,
+                color = VoiceInkColors.TextMuted
+            )
+        }
+
+        Text(
+            text = detail,
+            style = MaterialTheme.typography.labelSmall,
+            color = VoiceInkColors.TextMuted,
+            modifier = Modifier.padding(start = 64.dp, top = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun MetricBar(
+    score: Int?,
+    barColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val clampedScore = score?.coerceIn(0, 5) ?: 0
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (i in 1..5) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(
+                        if (i <= clampedScore) barColor else VoiceInkColors.SurfaceBright
+                    )
+            )
+        }
+    }
+}
+
+private fun formatAccuracyDetail(benchmark: ModelBenchmark?): String {
+    val wer = benchmark?.wer ?: return "N/A"
+    val dataset = benchmark.werDataset
+    val werText = String.format(Locale.US, "%.2f", wer)
+    return if (dataset.isNullOrBlank()) {
+        "WER $werText%"
+    } else {
+        "WER $werText% ($dataset)"
+    }
+}
+
+private fun formatSpeedDetail(benchmark: ModelBenchmark?): String {
+    benchmark?.rtfx?.let { rtfx ->
+        val text = String.format(Locale.US, "%.0f", rtfx)
+        return "RTFx $text"
+    }
+    benchmark?.relativeLatency?.let { rel ->
+        val text = String.format(Locale.US, "%.1f", rel)
+        return "Rel. latency ${text}x"
+    }
+    benchmark?.paramsM?.let { params ->
+        return "Params ${params}M"
+    }
+    return "N/A"
+}
+
+// ============================================
+// COMPACT USAGE CARD
+// ============================================
+
+@Composable
+private fun CompactUsageCard(
+    subscriptionTier: SubscriptionTier,
+    localMinutesUsed: Float,
+    cloudMinutesUsed: Float,
+    onUpgradeClick: () -> Unit
+) {
+    val isPro = subscriptionTier == SubscriptionTier.PRO
+    
+    if (isPro) {
+        // Pro users: just show a simple badge
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = VoiceInkColors.Primary.copy(alpha = 0.1f)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Outlined.Star,
+                    contentDescription = null,
+                    tint = VoiceInkColors.Primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Pro • Unlimited usage",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = VoiceInkColors.Primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    } else {
+        // Free users: show usage bars
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = VoiceInkColors.Surface,
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Free Plan",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = VoiceInkColors.TextMuted
+                    )
+                    
+                    Surface(
+                        onClick = onUpgradeClick,
+                        shape = RoundedCornerShape(8.dp),
+                        color = VoiceInkColors.Primary
+                    ) {
+                        Text(
+                            text = "Upgrade",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Local usage
+                MiniUsageBar(
+                    label = "Local",
+                    used = localMinutesUsed,
+                    limit = 60f,
+                    color = VoiceInkColors.Secondary
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Cloud usage
+                MiniUsageBar(
+                    label = "Cloud",
+                    used = cloudMinutesUsed,
+                    limit = 5f,
+                    color = VoiceInkColors.Primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniUsageBar(
+    label: String,
+    used: Float,
+    limit: Float,
+    color: Color
+) {
+    val progress = (used / limit).coerceIn(0f, 1f)
+    val isNearLimit = progress >= 0.8f
+    
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = VoiceInkColors.TextMuted,
+            modifier = Modifier.width(40.dp)
+        )
+        
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .weight(1f)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp)),
+            color = if (isNearLimit) VoiceInkColors.Warning else color,
+            trackColor = VoiceInkColors.SurfaceBright
+        )
+        
+        Spacer(modifier = Modifier.width(8.dp))
+        
+        Text(
+            text = "${used.toInt()}/${limit.toInt()}m",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isNearLimit) VoiceInkColors.Warning else VoiceInkColors.TextMuted
+        )
+    }
+}
+
+// ============================================
+// API KEY FIELD (Simplified)
+// ============================================
+
+@Composable
+private fun ApiKeyField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
@@ -611,256 +1011,237 @@ private fun PremiumApiKeyField(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = VoiceInkColors.TextSecondary,
-            fontWeight = FontWeight.Medium
+            color = VoiceInkColors.TextMuted
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             placeholder = { 
-                Text(
-                    placeholder,
-                    color = VoiceInkColors.TextMuted
-                ) 
+                Text(placeholder, color = VoiceInkColors.TextMuted, style = MaterialTheme.typography.bodyMedium) 
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            visualTransformation = if (isVisible)
-                VisualTransformation.None
-            else
-                PasswordVisualTransformation(),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            visualTransformation = if (isVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { isVisible = !isVisible }) {
                     Icon(
-                        imageVector = if (isVisible)
-                            Icons.Default.VisibilityOff
-                        else
-                            Icons.Default.Visibility,
-                        contentDescription = if (isVisible) "Hide" else "Show",
-                        tint = VoiceInkColors.TextMuted
+                        imageVector = if (isVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null,
+                        tint = VoiceInkColors.TextMuted,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = VoiceInkColors.Primary,
                 unfocusedBorderColor = VoiceInkColors.GlassBorder,
-                focusedContainerColor = VoiceInkColors.SurfaceLight,
-                unfocusedContainerColor = VoiceInkColors.SurfaceLight,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
                 cursorColor = VoiceInkColors.Primary,
                 focusedTextColor = VoiceInkColors.TextPrimary,
                 unfocusedTextColor = VoiceInkColors.TextPrimary
             ),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(10.dp)
         )
     }
 }
 
-@Composable
-private fun InfoCard() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-            .border(1.dp, VoiceInkColors.GlassBorder, RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = VoiceInkColors.Surface)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Getting API Keys",
-                style = MaterialTheme.typography.titleSmall,
-                color = VoiceInkColors.TextPrimary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Gemini: aistudio.google.com\nOpenAI: platform.openai.com",
-                style = MaterialTheme.typography.bodySmall,
-                color = VoiceInkColors.TextMuted
-            )
-        }
-    }
-}
+// ============================================
+// LANGUAGE SELECTOR
+// ============================================
 
 @Composable
-private fun UsageCard(
-    subscriptionTier: SubscriptionTier,
-    localMinutesUsed: Float,
-    cloudMinutesUsed: Float,
-    lastResetTimestamp: Long,
-    onUpgradeClick: () -> Unit
+private fun LanguageSelector(
+    selectedLanguageCode: String,
+    onLanguageSelected: (Language) -> Unit
 ) {
-    val isPro = subscriptionTier == SubscriptionTier.PRO
-    val localLimit = if (isPro) Float.MAX_VALUE else 60f
-    val cloudLimit = if (isPro) Float.MAX_VALUE else 5f
+    var expanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val selectedLanguage = WhisperLanguages.findByCode(selectedLanguageCode) ?: WhisperLanguages.AUTO_DETECT
 
-    // Calculate next reset date (first of next month)
-    val nextResetDate = remember(lastResetTimestamp) {
-        java.util.Calendar.getInstance().apply {
-            add(java.util.Calendar.MONTH, 1)
-            set(java.util.Calendar.DAY_OF_MONTH, 1)
-        }.timeInMillis
-    }
-    val dateFormat = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-    val resetDateStr = dateFormat.format(Date(nextResetDate))
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .border(
-                width = 1.dp,
-                brush = if (isPro) Brush.horizontalGradient(
-                    listOf(VoiceInkColors.Primary, VoiceInkColors.Secondary)
-                ) else Brush.horizontalGradient(
-                    listOf(VoiceInkColors.GlassBorder, VoiceInkColors.GlassBorder)
-                ),
-                shape = RoundedCornerShape(20.dp)
-            ),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = VoiceInkColors.Surface)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            // Plan badge
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isPro) VoiceInkColors.Primary else VoiceInkColors.SurfaceBright
-                    ) {
-                        Text(
-                            text = if (isPro) "PRO" else "FREE",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isPro) Color.White else VoiceInkColors.TextSecondary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    if (isPro) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Unlimited usage",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = VoiceInkColors.Primary
-                        )
-                    }
-                }
-
-                if (!isPro) {
-                    Surface(
-                        onClick = onUpgradeClick,
-                        shape = RoundedCornerShape(12.dp),
-                        color = VoiceInkColors.Primary
-                    ) {
-                        Text(
-                            text = "Upgrade",
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
-            if (!isPro) {
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Local usage
-                UsageProgressRow(
-                    label = "Local transcription",
-                    used = localMinutesUsed,
-                    limit = localLimit,
-                    color = VoiceInkColors.Secondary
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Cloud usage
-                UsageProgressRow(
-                    label = "Cloud transcription",
-                    used = cloudMinutesUsed,
-                    limit = cloudLimit,
-                    color = VoiceInkColors.Primary
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Reset date
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Resets on",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = VoiceInkColors.TextMuted
-                    )
-                    Text(
-                        text = resetDateStr,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = VoiceInkColors.TextSecondary,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+    val filteredLanguages = remember(searchQuery) {
+        if (searchQuery.isEmpty()) {
+            WhisperLanguages.COMMON
+        } else {
+            WhisperLanguages.ALL.filter {
+                it.name.contains(searchQuery, ignoreCase = true) ||
+                it.code.contains(searchQuery, ignoreCase = true)
             }
         }
     }
-}
 
-@Composable
-private fun UsageProgressRow(
-    label: String,
-    used: Float,
-    limit: Float,
-    color: Color
-) {
-    val progress = (used / limit).coerceIn(0f, 1f)
-    val isNearLimit = progress >= 0.8f
-
-    Column {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = VoiceInkColors.Surface,
+        tonalElevation = 1.dp,
+        onClick = { expanded = true }
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                color = VoiceInkColors.TextSecondary
-            )
-            Text(
-                text = "${String.format("%.1f", used)} / ${limit.toInt()} min",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (isNearLimit) VoiceInkColors.Warning else VoiceInkColors.TextMuted,
-                fontWeight = if (isNearLimit) FontWeight.Medium else FontWeight.Normal
-            )
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        LinearProgressIndicator(
-            progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp)),
-            color = if (isNearLimit) VoiceInkColors.Warning else color,
-            trackColor = VoiceInkColors.SurfaceBright
-        )
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Language,
+                    contentDescription = null,
+                    tint = VoiceInkColors.Primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = selectedLanguage.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = VoiceInkColors.TextPrimary
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                InfoTooltip(
+                    text = "Works for local Whisper models and cloud models. Auto-detect lets the model decide. For OpenAI, we send the language code; for Gemini we provide a language hint."
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = VoiceInkColors.TextMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+
+    if (expanded) {
+        Dialog(onDismissRequest = { expanded = false; searchQuery = "" }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.7f)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = VoiceInkColors.Surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Select Language",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = VoiceInkColors.TextPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search...", color = VoiceInkColors.TextMuted) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = VoiceInkColors.Primary,
+                            unfocusedBorderColor = VoiceInkColors.GlassBorder,
+                            cursorColor = VoiceInkColors.Primary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(filteredLanguages) { language ->
+                            val isSelected = language.code == selectedLanguageCode
+                            Surface(
+                                onClick = {
+                                    onLanguageSelected(language)
+                                    expanded = false
+                                    searchQuery = ""
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) VoiceInkColors.Primary.copy(alpha = 0.1f) else Color.Transparent
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = language.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) VoiceInkColors.Primary else VoiceInkColors.TextPrimary
+                                    )
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = VoiceInkColors.Primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-private fun formatSize(bytes: Long): String {
-    return when {
-        bytes >= 1_000_000_000 -> String.format("%.1f GB", bytes / 1_000_000_000.0)
-        bytes >= 1_000_000 -> String.format("%.0f MB", bytes / 1_000_000.0)
-        bytes >= 1_000 -> String.format("%.0f KB", bytes / 1_000.0)
-        else -> "$bytes B"
+@Composable
+private fun InfoTooltip(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Info,
+                contentDescription = "Info",
+                tint = VoiceInkColors.TextMuted,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            properties = PopupProperties(
+                focusable = true,
+                dismissOnClickOutside = true,
+                dismissOnBackPress = true
+            )
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = VoiceInkColors.TextPrimary,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .widthIn(max = 280.dp)
+            )
+        }
     }
 }
+
+// ============================================
+// PRO FEATURES MODAL
+// ============================================
 
 @Composable
 private fun ProFeaturesModal(
@@ -875,31 +1256,25 @@ private fun ProFeaturesModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = VoiceInkColors.Surface)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Close button
                 Box(modifier = Modifier.fillMaxWidth()) {
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier.align(Alignment.TopEnd)
                     ) {
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = "Close",
-                            tint = VoiceInkColors.TextMuted
-                        )
+                        Icon(Icons.Outlined.Close, contentDescription = "Close", tint = VoiceInkColors.TextMuted)
                     }
                 }
 
-                // Pro badge
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(64.dp)
                         .background(
                             brush = Brush.linearGradient(
                                 colors = listOf(VoiceInkColors.Primary, VoiceInkColors.Secondary)
@@ -908,15 +1283,10 @@ private fun ProFeaturesModal(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Outlined.Star,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Icon(Icons.Outlined.Star, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
                     text = "VoiceInk Pro",
@@ -931,41 +1301,22 @@ private fun ProFeaturesModal(
                     color = VoiceInkColors.TextMuted
                 )
 
+                Spacer(modifier = Modifier.height(20.dp))
+
+                ProFeatureRow(Icons.Outlined.AllInclusive, "Unlimited transcription")
+                Spacer(modifier = Modifier.height(8.dp))
+                ProFeatureRow(Icons.Outlined.AutoAwesome, "Auto-punctuation")
+                Spacer(modifier = Modifier.height(8.dp))
+                ProFeatureRow(Icons.Outlined.Bolt, "Priority processing")
+
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Features list
-                ProFeatureItem(
-                    icon = Icons.Outlined.AllInclusive,
-                    title = "Unlimited Transcription",
-                    description = "No monthly limits on local or cloud"
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                ProFeatureItem(
-                    icon = Icons.Outlined.AutoAwesome,
-                    title = "Auto-Punctuation",
-                    description = "AI-powered punctuation & formatting"
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                ProFeatureItem(
-                    icon = Icons.Outlined.Bolt,
-                    title = "Priority Processing",
-                    description = "Faster cloud transcription"
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                // Price
                 Text(
                     text = "$4.99/month",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = VoiceInkColors.TextPrimary
                 )
-
                 Text(
                     text = "or $39.99/year (save 33%)",
                     style = MaterialTheme.typography.bodySmall,
@@ -974,31 +1325,21 @@ private fun ProFeaturesModal(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Subscribe button
                 Button(
                     onClick = onSubscribe,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = VoiceInkColors.Primary
-                    )
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = VoiceInkColors.Primary)
                 ) {
-                    Text(
-                        text = "Subscribe to Pro",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("Subscribe", fontWeight = FontWeight.SemiBold)
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Cancel anytime. Restore purchases available.",
+                    text = "Cancel anytime",
                     style = MaterialTheme.typography.labelSmall,
-                    color = VoiceInkColors.TextMuted,
-                    textAlign = TextAlign.Center
+                    color = VoiceInkColors.TextMuted
                 )
             }
         }
@@ -1006,46 +1347,96 @@ private fun ProFeaturesModal(
 }
 
 @Composable
-private fun ProFeatureItem(
-    icon: ImageVector,
-    title: String,
-    description: String
-) {
+private fun ProFeatureRow(icon: ImageVector, text: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(
-                    color = VoiceInkColors.Primary.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(12.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = VoiceInkColors.Primary,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-
+        Icon(icon, contentDescription = null, tint = VoiceInkColors.Primary, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(12.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = VoiceInkColors.TextPrimary)
+    }
+}
 
-        Column {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = VoiceInkColors.TextPrimary
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = VoiceInkColors.TextMuted
-            )
+// ============================================
+// LARGE MODEL DOWNLOAD DIALOG
+// ============================================
+
+@Composable
+private fun LargeModelDownloadDialog(
+    model: LocalModel,
+    modelSize: Long,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = VoiceInkColors.Surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Outlined.Warning,
+                    contentDescription = null,
+                    tint = VoiceInkColors.Warning,
+                    modifier = Modifier.size(48.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Large Download",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = VoiceInkColors.TextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "${model.name} is ${formatSize(modelSize)}. WiFi recommended.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = VoiceInkColors.TextMuted,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = VoiceInkColors.Primary)
+                    ) {
+                        Text("Download")
+                    }
+                }
+            }
         }
+    }
+}
+
+private fun formatSize(bytes: Long): String {
+    return when {
+        bytes >= 1_000_000_000 -> String.format("%.1f GB", bytes / 1_000_000_000.0)
+        bytes >= 1_000_000 -> String.format("%.0f MB", bytes / 1_000_000.0)
+        bytes >= 1_000 -> String.format("%.0f KB", bytes / 1_000.0)
+        else -> "$bytes B"
     }
 }

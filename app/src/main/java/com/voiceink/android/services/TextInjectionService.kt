@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,12 +28,23 @@ class TextInjectionService : AccessibilityService() {
 
     companion object {
         private const val TAG = "TextInjectionService"
+        
+        // Double-press detection timing
+        private const val DOUBLE_PRESS_TIMEOUT_MS = 400L
 
         // Singleton instance for checking service status and injecting text
         private var instance: TextInjectionService? = null
 
         private val _isEnabled = MutableStateFlow(false)
         val isEnabled: StateFlow<Boolean> = _isEnabled.asStateFlow()
+        
+        // Volume shortcut enabled state
+        private val _volumeShortcutEnabled = MutableStateFlow(true)
+        val volumeShortcutEnabled: StateFlow<Boolean> = _volumeShortcutEnabled.asStateFlow()
+        
+        fun setVolumeShortcutEnabled(enabled: Boolean) {
+            _volumeShortcutEnabled.value = enabled
+        }
 
         /**
          * Check if the accessibility service is enabled
@@ -66,6 +78,9 @@ class TextInjectionService : AccessibilityService() {
     }
 
     private var lastFocusedNode: AccessibilityNodeInfo? = null
+    
+    // Volume button double-press detection
+    private var lastVolumeUpPressTime = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -115,6 +130,53 @@ class TextInjectionService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.d(TAG, "TextInjectionService interrupted")
+    }
+    
+    /**
+     * Detect volume button presses for shortcuts.
+     * Double-press Volume Up = Toggle recording via OverlayService
+     */
+    override fun onKeyEvent(event: KeyEvent?): Boolean {
+        if (event == null || !_volumeShortcutEnabled.value) {
+            return super.onKeyEvent(event)
+        }
+        
+        // Only handle Volume Up key
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP && event.action == KeyEvent.ACTION_DOWN) {
+            val currentTime = System.currentTimeMillis()
+            
+            if (currentTime - lastVolumeUpPressTime < DOUBLE_PRESS_TIMEOUT_MS) {
+                // Double-press detected!
+                Log.d(TAG, "Double-press Volume Up detected - triggering recording")
+                lastVolumeUpPressTime = 0L // Reset to prevent triple-press
+                
+                // Toggle recording via OverlayService
+                triggerOverlayRecording()
+                
+                // Consume the event so volume doesn't change
+                return true
+            } else {
+                lastVolumeUpPressTime = currentTime
+            }
+        }
+        
+        // Don't consume single presses - let volume change normally
+        return super.onKeyEvent(event)
+    }
+    
+    /**
+     * Trigger recording toggle in OverlayService
+     */
+    private fun triggerOverlayRecording() {
+        try {
+            // Send broadcast to OverlayService to toggle recording
+            val intent = Intent("com.voiceink.android.TOGGLE_RECORDING")
+            intent.setPackage(packageName)
+            sendBroadcast(intent)
+            Log.d(TAG, "Sent toggle recording broadcast")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger overlay recording", e)
+        }
     }
 
     override fun onDestroy() {

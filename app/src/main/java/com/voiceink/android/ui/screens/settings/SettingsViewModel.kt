@@ -20,6 +20,7 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val selectedModelId: String = "gemini-2.5-flash",
+    val selectedLanguage: String = "auto",
     val geminiApiKey: String = "",
     val openaiApiKey: String = "",
     val downloadStates: Map<String, DownloadState> = emptyMap(),
@@ -48,6 +49,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 settingsRepository.selectedModelId,
+                settingsRepository.selectedLanguage,
                 settingsRepository.geminiApiKey,
                 settingsRepository.openaiApiKey,
                 modelDownloadManager.downloadStates,
@@ -57,18 +59,20 @@ class SettingsViewModel @Inject constructor(
                 subscriptionRepository.subscriptionStatus
             ) { values ->
                 val modelId = values[0] as String
-                val geminiKey = values[1] as String
-                val openaiKey = values[2] as String
+                val language = values[1] as String
+                val geminiKey = values[2] as String
+                val openaiKey = values[3] as String
                 @Suppress("UNCHECKED_CAST")
-                val downloadStates = values[3] as Map<String, DownloadState>
-                val overlayEnabled = values[4] as Boolean
-                val autoPunctuationEnabled = values[5] as Boolean
-                val usageStats = values[6] as UsageStats
-                val subscriptionStatus = values[7] as SubscriptionStatus
+                val downloadStates = values[4] as Map<String, DownloadState>
+                val overlayEnabled = values[5] as Boolean
+                val autoPunctuationEnabled = values[6] as Boolean
+                val usageStats = values[7] as UsageStats
+                val subscriptionStatus = values[8] as SubscriptionStatus
                 val subscriptionTier = subscriptionStatus.tier
 
                 SettingsUiState(
                     selectedModelId = modelId,
+                    selectedLanguage = language,
                     geminiApiKey = geminiKey,
                     openaiApiKey = openaiKey,
                     downloadStates = downloadStates,
@@ -113,6 +117,13 @@ class SettingsViewModel @Inject constructor(
     fun selectModel(modelId: String) {
         viewModelScope.launch {
             settingsRepository.setSelectedModelId(modelId)
+        }
+    }
+
+    fun setSelectedLanguage(languageCode: String) {
+        _uiState.update { it.copy(selectedLanguage = languageCode) }
+        viewModelScope.launch {
+            settingsRepository.setSelectedLanguage(languageCode)
         }
     }
 

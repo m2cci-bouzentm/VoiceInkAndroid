@@ -66,17 +66,42 @@ class ModelDownloadManager @Inject constructor(
         if (!modelDir.exists()) return false
 
         return when (model.id) {
+            "whisper-tiny-en" -> {
+                // Whisper tiny.en model files
+                File(modelDir, "tiny.en-encoder.onnx").exists() &&
+                File(modelDir, "tiny.en-decoder.onnx").exists() &&
+                File(modelDir, "tiny.en-tokens.txt").exists()
+            }
             "whisper-small" -> {
                 // Whisper Small multilingual model files
                 File(modelDir, "small-encoder.int8.onnx").exists() &&
                 File(modelDir, "small-decoder.int8.onnx").exists() &&
                 File(modelDir, "small-tokens.txt").exists()
             }
-            "whisper-tiny-en" -> {
-                // Whisper tiny.en model files
-                File(modelDir, "tiny.en-encoder.onnx").exists() &&
-                File(modelDir, "tiny.en-decoder.onnx").exists() &&
-                File(modelDir, "tiny.en-tokens.txt").exists()
+            "whisper-medium" -> {
+                // Whisper Medium multilingual model files
+                File(modelDir, "medium-encoder.int8.onnx").exists() &&
+                File(modelDir, "medium-decoder.int8.onnx").exists() &&
+                File(modelDir, "medium-tokens.txt").exists()
+            }
+            "whisper-large-v3" -> {
+                // Whisper Large v3 multilingual model files
+                File(modelDir, "large-v3-encoder.int8.onnx").exists() &&
+                File(modelDir, "large-v3-decoder.int8.onnx").exists() &&
+                File(modelDir, "large-v3-tokens.txt").exists()
+            }
+            "distil-whisper-large-v3" -> {
+                // Distil Whisper Large v3 model files
+                File(modelDir, "distil-large-v3-encoder.int8.onnx").exists() &&
+                File(modelDir, "distil-large-v3-decoder.int8.onnx").exists() &&
+                File(modelDir, "distil-large-v3-tokens.txt").exists()
+            }
+            "parakeet-tdt-0.6b" -> {
+                // Parakeet TDT 0.6B v3 transducer model files (int8 quantized)
+                File(modelDir, "encoder.int8.onnx").exists() &&
+                File(modelDir, "decoder.int8.onnx").exists() &&
+                File(modelDir, "joiner.int8.onnx").exists() &&
+                File(modelDir, "tokens.txt").exists()
             }
             else -> false
         }
@@ -233,8 +258,12 @@ class ModelDownloadManager @Inject constructor(
      */
     private fun getDownloadUrl(model: LocalModel): String {
         return when (model.id) {
-            "whisper-small" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2"
             "whisper-tiny-en" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2"
+            "whisper-small" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2"
+            "whisper-medium" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-medium.tar.bz2"
+            "whisper-large-v3" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-large-v3.tar.bz2"
+            "distil-whisper-large-v3" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-distil-large-v3.tar.bz2"
+            "parakeet-tdt-0.6b" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2"
             else -> ""
         }
     }
@@ -244,8 +273,11 @@ class ModelDownloadManager @Inject constructor(
      */
     fun getModelSize(model: LocalModel): Long {
         return when (model.id) {
-            "whisper-small" -> 640_000_000L // ~640MB
             "whisper-tiny-en" -> 40_000_000L // ~40MB
+            "parakeet-tdt-0.6b" -> 490_000_000L // ~490MB (int8 quantized)
+            "whisper-small" -> 460_000_000L // ~460MB
+            "distil-whisper-large-v3" -> 1_000_000_000L // ~1GB
+            "whisper-medium" -> 1_500_000_000L // ~1.5GB
             else -> 0L
         }
     }

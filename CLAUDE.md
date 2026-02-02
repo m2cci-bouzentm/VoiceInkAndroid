@@ -63,7 +63,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ./gradlew clean assembleDebug
 
 # Install on connected device
-adb install app/build/outputs/apk/debug/app-debug.apk
+./gradlew installDebug
 ```
 
 ## Project Structure
@@ -184,6 +184,20 @@ app/src/main/
 - Auto-starts when app launches if previously enabled
 - Persists when app goes to background
 - **Direct text injection**: After transcription, text is inserted at cursor in focused app (if accessibility enabled)
+- Requires microphone permission; Settings flow prompts for mic permission when enabling
+
+### Auto-Punctuation (Gemini)
+- Runs after **local model** transcriptions only
+- Uses Gemini 2.0 Flash to add punctuation and capitalization
+- Requires a Gemini API key; otherwise returns original text
+- Cloud model transcriptions skip this step
+- Settings includes an info tooltip explaining the above
+
+### Language Selection (Local + Cloud)
+- Language selector shown for local Whisper models that support it and for cloud models
+- Default is `Auto-detect`
+- Cloud providers use language hint/parameter when a specific language is selected
+- Settings includes an info tooltip explaining how language selection is applied
 
 ### Text Injection (Accessibility Service)
 - `TextInjectionService.kt` uses Android Accessibility API to inject text into any app's input field
@@ -199,6 +213,33 @@ app/src/main/
 - Shows download progress (0-100%) in Settings screen
 - Model files stored in `context.filesDir/models/<model-path>/`
 - Delete button to remove downloaded models
+
+### Model Accuracy & Speed Bars (Settings)
+Each model now shows **Accuracy** and **Speed** bars in Settings using published benchmarks only.
+
+**Benchmarks + Sources**
+- Whisper Tiny EN: WER 5.6556 (LibriSpeech test-clean), 39M params  
+  https://huggingface.co/openai/whisper-tiny.en  
+- Whisper Small: WER 3.4322 (LibriSpeech test-clean), 244M params  
+  https://huggingface.co/openai/whisper-small  
+- Whisper Medium: WER 2.9004 (LibriSpeech test-clean), 769M params  
+  https://huggingface.co/openai/whisper-medium  
+- Whisper param table (all sizes):  
+  https://huggingface.co/openai/whisper  
+- Distil Whisper Large v3: WER 2.4289 (LibriSpeech validation-clean), 756M params, rel. latency 6.3x  
+  https://huggingface.co/distil-whisper/distil-large-v3  
+- Parakeet TDT 0.6B: WER 1.69 (LibriSpeech test-clean), 600M params, RTFx 3380  
+  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2  
+
+**Scoring (UI bins, not a claim of precise ranking)**
+- Accuracy uses WER bins (lower is better): `<=2.0 → 5`, `<=3.0 → 4`, `<=4.5 → 3`, `<=7.0 → 2`, else `1`.
+- Speed uses: `RTFx` if available, else `relative latency`, else `paramsM`.
+  - RTFx bins: `>=1000 → 5`, `>=100 → 4`, `>=10 → 3`, `>=1 → 2`, else `1`.
+  - Relative latency bins: `>=6 → 5`, `>=4 → 4`, `>=2 → 3`, `>=1 → 2`, else `1`.
+  - Params bins: `<=50M → 5`, `<=250M → 4`, `<=800M → 3`, `<=1200M → 2`, else `1`.
+
+**Cloud models**
+- No published WER/RTFx benchmarks are stored in code, so bars show `N/A`.
 
 ### Local Model Status
 - Model definitions added to `TranscriptionModel.kt`
@@ -257,6 +298,7 @@ Allows users to stop recording **without processing/transcribing** the audio. Th
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 ```
 
 ## Issues & Solutions Log
@@ -399,6 +441,23 @@ val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
 
 **Tip:** Always check the model's metadata in logcat (`feat_dim=X`) to determine correct feature dimension.
 
+### Issue 11: Free 5-Minute Limit Blocks Debug Testing
+**Symptom:** Debug builds hit the free-tier 5‑minute cloud limit while testing.
+**Solution:** Bypass usage limits in debuggable builds (check `ApplicationInfo.FLAG_DEBUGGABLE`) inside `UsageRepository.canTranscribe()` and `canTranscribeFile()`. Release builds remain enforced.
+
+### Issue 12: Floating Overlay Crash When Enabling
+**Symptom:** Toggling the floating overlay crashes immediately.
+**Cause:** Starting a foreground service with `FOREGROUND_SERVICE_TYPE_MICROPHONE` without mic permission can crash on Android 14.
+**Solution:** Gate overlay enable with mic permission in Settings; start foreground with microphone type only when permission is granted, otherwise start without type and show a toast. Also prevent toggling recording without mic permission.
+
+### Issue 13: Language Selection Missing for Cloud Models
+**Symptom:** Language selector only appeared for local Whisper models.
+**Solution:** Show language selector for cloud models too (default `auto`). Pass the language to OpenAI (`language` form field) and add a language hint to the Gemini prompt when not `auto`.
+
+### Issue 14: Pro Tier Needed by Default for Testing
+**Symptom:** App testing required Pro tier behavior by default.
+**Solution:** Default subscription tier to PRO on debuggable builds using `ApplicationInfo.FLAG_DEBUGGABLE`. Release builds remain FREE by default. Also keep `currentTier` in sync with `subscriptionStatus`.
+
 ## Dependencies (build.gradle.kts)
 
 Key dependencies:
@@ -453,11 +512,13 @@ Deprecation warnings (safe to ignore):
 - [x] Model download UI with progress indicator
 - [x] Text injection via accessibility service
 - [x] Floating overlay button (record from any app)
-- [ ] Full Sherpa-ONNX integration (uncomment dependency, implement recognition)
-- [ ] Transcription history
+- [x] Full Sherpa-ONNX integration (upgraded to official v1.12.23 AAR)
+- [x] Transcription history (Room database, Session 13)
 - [ ] Export/share functionality
 - [ ] Widgets
 - [ ] Wear OS support
+- [ ] RevenueCat billing integration (stubs ready)
+- [ ] More NeMo models (now possible with official sherpa-onnx)
 
 ## Quick Reference
 
@@ -812,7 +873,7 @@ Implemented usage tracking infrastructure for monetization. Free tier limits: 60
 - Room database for transcription history (Phase 2)
 
 ---
-*Last updated: January 14, 2026*
+*Last updated: January 15, 2026*
 *Session 1: Initial project setup, build fixes*
 *Session 2: Added Parakeet TDT v3 model, notification recording controls*
 *Session 3: Model download UI, text injection, fixed file name mismatch (Issue 7), implemented sherpa-onnx transcription (Issue 8)*
@@ -826,6 +887,7 @@ Implemented usage tracking infrastructure for monetization. Free tier limits: 60
 *Session 11: Added abort/cancel recording feature (long-press to cancel without transcribing)*
 *Session 12: Usage tracking foundation - UsageRepository, SubscriptionRepository stub, limit enforcement in TranscriptionRegistry*
 *Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
+*Session 14: Upgraded sherpa-onnx to official v1.12.23 AAR for Parakeet support, added real benchmark data*
 
 ## Key Files Modified/Created (Session 13)
 
@@ -970,3 +1032,78 @@ implementation("com.revenuecat.purchases:purchases:8.10.7")
 ### Issue Fixed - RevenueCat Version:
 - Error: Version 7.9.2 not found
 - Fix: Updated to version 8.10.7
+
+## Key Files Modified/Created (Session 14)
+
+### Sherpa-ONNX Upgrade for Parakeet Support
+Upgraded from outdated third-party library to official sherpa-onnx v1.12.23 AAR to fix Parakeet model crashes.
+
+### Problem:
+Parakeet TDT 0.6B was crashing with:
+```
+sherpa-onnx: 'vocab_size' does not exist in the metadata
+Fatal signal 6 (SIGABRT)
+```
+
+### Root Cause:
+Third-party library `com.bihe0832.android:lib-sherpa-onnx:6.25.12` was outdated and didn't include the Parakeet fix (PR #2500, merged Aug 16, 2025).
+
+### Solution:
+1. Downloaded official `sherpa-onnx-1.12.23.aar` (37MB) from GitHub releases
+2. Placed in `app/libs/` directory
+3. Changed build.gradle.kts dependency from Maven to local AAR
+
+### New Files:
+- `app/libs/sherpa-onnx-1.12.23.aar` - Official sherpa-onnx library with Parakeet support
+
+### Modified Files:
+- `app/build.gradle.kts`:
+  ```kotlin
+  // OLD: implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.12")
+  // NEW:
+  implementation(files("libs/sherpa-onnx-1.12.23.aar"))
+  ```
+
+- `domain/model/TranscriptionModel.kt`:
+  - Re-enabled Parakeet TDT 0.6B (removed `isBroken = true`)
+  - Added real benchmark data from HuggingFace:
+    - Parakeet: WER 1.69% (LibriSpeech test-clean)
+    - Whisper Tiny: WER 5.66-8.44%
+    - Whisper Small: WER 3.43%
+    - Distil Large v3: WER 2.43%
+  - Added Gemini 2.0 Flash back to featured models
+
+- `data/model/ModelDownloadManager.kt`:
+  - Fixed Parakeet model ID: `parakeet-tdt-0.6b` (was incorrectly `parakeet-tdt-1.1b`)
+  - Fixed download URL to correct 0.6B model
+
+- `domain/transcription/LocalTranscriptionService.kt`:
+  - Updated model size for Parakeet (150MB)
+
+### Sherpa-ONNX Version Comparison:
+| Library | Version | Parakeet Support |
+|---------|---------|------------------|
+| com.bihe0832.android:lib-sherpa-onnx | 6.25.12 | No (crashes) |
+| Official AAR | 1.12.23 | Yes (fixed) |
+
+### Download URL (for reference):
+```
+https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-1.12.23.aar
+```
+
+---
+*Last updated: January 15, 2026*
+*Session 1: Initial project setup, build fixes*
+*Session 2: Added Parakeet TDT v3 model, notification recording controls*
+*Session 3: Model download UI, text injection, fixed file name mismatch (Issue 7), implemented sherpa-onnx transcription (Issue 8)*
+*Session 4: Replaced notification recording with floating overlay button (draggable, works from any app)*
+*Session 5: Fixed local model empty text issue (Issue 9) - added modelType parameter to sherpa-onnx config*
+*Session 6: Added comprehensive debug logging and validation to LocalTranscriptionService for troubleshooting*
+*Session 7: Complete UI redesign with premium dark theme (HomeScreen, SettingsScreen, Color, Type, Theme)*
+*Session 8: Added SenseVoice & Whisper Small multilingual models, marked Parakeet as broken, removed floating button animation*
+*Session 9: Replaced Groq with OpenAI Whisper, updated Gemini models (2.5/2.0)*
+*Session 10: Replaced failed VoiceInputService with VoiceInkInputMethodService (IME) for reliable voice input from any keyboard*
+*Session 11: Added abort/cancel recording feature (long-press to cancel without transcribing)*
+*Session 12: Usage tracking foundation - UsageRepository, SubscriptionRepository stub, limit enforcement in TranscriptionRegistry*
+*Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
+*Session 14: Upgraded sherpa-onnx to official v1.12.23 AAR for Parakeet support, added real benchmark data, fixed model download URL*

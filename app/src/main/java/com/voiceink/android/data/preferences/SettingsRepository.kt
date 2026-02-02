@@ -28,6 +28,7 @@ class SettingsRepository @Inject constructor(
         val SELECTED_MODEL_ID = stringPreferencesKey("selected_model_id")
         val OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
         val AUTO_PUNCTUATION_ENABLED = booleanPreferencesKey("auto_punctuation_enabled")
+        val SELECTED_LANGUAGE = stringPreferencesKey("selected_language")
     }
 
     // API Keys
@@ -81,6 +82,17 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoPunctuationEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.AUTO_PUNCTUATION_ENABLED] = enabled
+        }
+    }
+
+    // Selected Language for Whisper models
+    val selectedLanguage: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.SELECTED_LANGUAGE] ?: "auto" // Default to auto-detect
+    }
+
+    suspend fun setSelectedLanguage(languageCode: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.SELECTED_LANGUAGE] = languageCode
         }
     }
 

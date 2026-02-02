@@ -6,6 +6,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.getFeatureConfig
 import com.voiceink.android.domain.model.LocalModel
 import com.voiceink.android.domain.model.TranscriptionModel
@@ -36,7 +37,13 @@ class LocalTranscriptionService @Inject constructor(
     private var recognizer: OfflineRecognizer? = null
     private var currentModelId: String? = null
 
-    override suspend fun transcribe(audioFile: File, model: TranscriptionModel): TranscriptionResult {
+    private var currentLanguage: String? = null
+
+    override suspend fun transcribe(
+        audioFile: File,
+        model: TranscriptionModel,
+        language: String
+    ): TranscriptionResult {
         return withContext(Dispatchers.IO) {
             try {
                 if (model !is LocalModel) {
@@ -63,9 +70,17 @@ class LocalTranscriptionService @Inject constructor(
                     )
                 }
 
-                // Initialize recognizer if needed
-                if (recognizer == null || currentModelId != model.id) {
-                    val initialized = initializeRecognizer(model)
+                // Determine language to use
+                val effectiveLanguage = if (model.supportsLanguageSelection && language != "auto") language else ""
+                Log.d(TAG, "Using language: ${if (effectiveLanguage.isEmpty()) "auto-detect" else effectiveLanguage}")
+
+                // Initialize recognizer if needed (also reinit if language changed for Whisper models)
+                val needsReinit = recognizer == null ||
+                    currentModelId != model.id ||
+                    (model.modelType == "whisper" && currentLanguage != effectiveLanguage)
+
+                if (needsReinit) {
+                    val initialized = initializeRecognizer(model, effectiveLanguage)
                     if (!initialized) {
                         return@withContext TranscriptionResult.Error("Failed to initialize transcription model")
                     }
@@ -134,8 +149,10 @@ class LocalTranscriptionService @Inject constructor(
 
     /**
      * Initialize the Sherpa-ONNX recognizer for the given model
+     * @param model The model to initialize
+     * @param language The language code for Whisper models (empty string for auto-detect)
      */
-    private fun initializeRecognizer(model: LocalModel): Boolean {
+    private fun initializeRecognizer(model: LocalModel, language: String = ""): Boolean {
         return try {
             // Release previous recognizer
             recognizer?.release()
@@ -144,6 +161,7 @@ class LocalTranscriptionService @Inject constructor(
             val modelDir = getModelDirectory(model)
             Log.d(TAG, "Initializing model from: ${modelDir.absolutePath}")
             Log.d(TAG, "Model directory exists: ${modelDir.exists()}")
+            Log.d(TAG, "Language setting: ${if (language.isEmpty()) "auto-detect" else language}")
 
             // List files in model directory for debugging
             val files = modelDir.listFiles()
@@ -158,11 +176,14 @@ class LocalTranscriptionService @Inject constructor(
 
             // Verify required files exist with non-zero size
             val requiredFiles = when (model.id) {
-                "whisper-small" -> listOf("small-encoder.int8.onnx", "small-decoder.int8.onnx", "small-tokens.txt")
                 "whisper-tiny-en" -> listOf("tiny.en-encoder.onnx", "tiny.en-decoder.onnx", "tiny.en-tokens.txt")
+                "whisper-small" -> listOf("small-encoder.int8.onnx", "small-decoder.int8.onnx", "small-tokens.txt")
+                "whisper-medium" -> listOf("medium-encoder.int8.onnx", "medium-decoder.int8.onnx", "medium-tokens.txt")
+                "distil-whisper-large-v3" -> listOf("distil-large-v3-encoder.int8.onnx", "distil-large-v3-decoder.int8.onnx", "distil-large-v3-tokens.txt")
+                "parakeet-tdt-0.6b" -> listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
                 else -> emptyList()
             }
-            
+
             for (fileName in requiredFiles) {
                 val file = File(modelDir, fileName)
                 if (!file.exists()) {
@@ -177,8 +198,11 @@ class LocalTranscriptionService @Inject constructor(
             }
 
             val config = when (model.id) {
-                "whisper-small" -> createWhisperSmallConfig(modelDir)
                 "whisper-tiny-en" -> createWhisperTinyEnConfig(modelDir)
+                "whisper-small" -> createWhisperSmallConfig(modelDir, language)
+                "whisper-medium" -> createWhisperMediumConfig(modelDir, language)
+                "distil-whisper-large-v3" -> createDistilWhisperLargeV3Config(modelDir, language)
+                "parakeet-tdt-0.6b" -> createParakeetConfig(modelDir)
                 else -> {
                     Log.e(TAG, "Unknown model type: ${model.id}")
                     return false
@@ -188,6 +212,7 @@ class LocalTranscriptionService @Inject constructor(
             Log.d(TAG, "Creating OfflineRecognizer...")
             recognizer = OfflineRecognizer(assetManager = null, config = config)
             currentModelId = model.id
+            currentLanguage = language
 
             Log.i(TAG, "Successfully initialized recognizer for model: ${model.id}")
             true
@@ -201,8 +226,9 @@ class LocalTranscriptionService @Inject constructor(
 
     /**
      * Create config for Whisper Small multilingual model (99+ languages)
+     * @param language Language code (empty for auto-detect)
      */
-    private fun createWhisperSmallConfig(modelDir: File): OfflineRecognizerConfig {
+    private fun createWhisperSmallConfig(modelDir: File, language: String = ""): OfflineRecognizerConfig {
         val encoderPath = File(modelDir, "small-encoder.int8.onnx").absolutePath
         val decoderPath = File(modelDir, "small-decoder.int8.onnx").absolutePath
         val tokensPath = File(modelDir, "small-tokens.txt").absolutePath
@@ -211,11 +237,12 @@ class LocalTranscriptionService @Inject constructor(
         Log.d(TAG, "  encoder: $encoderPath")
         Log.d(TAG, "  decoder: $decoderPath")
         Log.d(TAG, "  tokens: $tokensPath")
+        Log.d(TAG, "  language: ${if (language.isEmpty()) "auto-detect" else language}")
 
         val whisperConfig = OfflineWhisperModelConfig(
             encoder = encoderPath,
             decoder = decoderPath,
-            language = "", // Empty for auto-detect
+            language = language, // User-selected or empty for auto-detect
             task = "transcribe",
             tailPaddings = 1000
         )
@@ -278,6 +305,170 @@ class LocalTranscriptionService @Inject constructor(
     }
 
     /**
+     * Create config for Whisper Medium multilingual model
+     * @param language Language code (empty for auto-detect)
+     */
+    private fun createWhisperMediumConfig(modelDir: File, language: String = ""): OfflineRecognizerConfig {
+        val encoderPath = File(modelDir, "medium-encoder.int8.onnx").absolutePath
+        val decoderPath = File(modelDir, "medium-decoder.int8.onnx").absolutePath
+        val tokensPath = File(modelDir, "medium-tokens.txt").absolutePath
+
+        Log.d(TAG, "Whisper Medium config paths:")
+        Log.d(TAG, "  encoder: $encoderPath")
+        Log.d(TAG, "  decoder: $decoderPath")
+        Log.d(TAG, "  tokens: $tokensPath")
+        Log.d(TAG, "  language: ${if (language.isEmpty()) "auto-detect" else language}")
+
+        val whisperConfig = OfflineWhisperModelConfig(
+            encoder = encoderPath,
+            decoder = decoderPath,
+            language = language, // User-selected or empty for auto-detect
+            task = "transcribe",
+            tailPaddings = 1000
+        )
+
+        val modelConfig = OfflineModelConfig(
+            whisper = whisperConfig,
+            tokens = tokensPath,
+            numThreads = 4, // More threads for larger model
+            debug = true,
+            modelType = "whisper"
+        )
+
+        val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
+        Log.d(TAG, "Feature config: sampleRate=$SAMPLE_RATE, featureDim=80 (Whisper Medium)")
+
+        return OfflineRecognizerConfig(
+            featConfig = featConfig,
+            modelConfig = modelConfig,
+            decodingMethod = "greedy_search"
+        )
+    }
+
+    /**
+     * Create config for Whisper Large v3 multilingual model
+     * @param language Language code (empty for auto-detect)
+     */
+    private fun createWhisperLargeV3Config(modelDir: File, language: String = ""): OfflineRecognizerConfig {
+        val encoderPath = File(modelDir, "large-v3-encoder.int8.onnx").absolutePath
+        val decoderPath = File(modelDir, "large-v3-decoder.int8.onnx").absolutePath
+        val tokensPath = File(modelDir, "large-v3-tokens.txt").absolutePath
+
+        Log.d(TAG, "Whisper Large v3 config paths:")
+        Log.d(TAG, "  encoder: $encoderPath")
+        Log.d(TAG, "  decoder: $decoderPath")
+        Log.d(TAG, "  tokens: $tokensPath")
+        Log.d(TAG, "  language: ${if (language.isEmpty()) "auto-detect" else language}")
+
+        val whisperConfig = OfflineWhisperModelConfig(
+            encoder = encoderPath,
+            decoder = decoderPath,
+            language = language, // User-selected or empty for auto-detect
+            task = "transcribe",
+            tailPaddings = 1000
+        )
+
+        val modelConfig = OfflineModelConfig(
+            whisper = whisperConfig,
+            tokens = tokensPath,
+            numThreads = 4, // More threads for larger model
+            debug = true,
+            modelType = "whisper"
+        )
+
+        val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
+        Log.d(TAG, "Feature config: sampleRate=$SAMPLE_RATE, featureDim=80 (Whisper Large v3)")
+
+        return OfflineRecognizerConfig(
+            featConfig = featConfig,
+            modelConfig = modelConfig,
+            decodingMethod = "greedy_search"
+        )
+    }
+
+    /**
+     * Create config for Distil Whisper Large v3 model
+     * @param language Language code (empty for auto-detect)
+     */
+    private fun createDistilWhisperLargeV3Config(modelDir: File, language: String = ""): OfflineRecognizerConfig {
+        val encoderPath = File(modelDir, "distil-large-v3-encoder.int8.onnx").absolutePath
+        val decoderPath = File(modelDir, "distil-large-v3-decoder.int8.onnx").absolutePath
+        val tokensPath = File(modelDir, "distil-large-v3-tokens.txt").absolutePath
+
+        Log.d(TAG, "Distil Whisper Large v3 config paths:")
+        Log.d(TAG, "  encoder: $encoderPath")
+        Log.d(TAG, "  decoder: $decoderPath")
+        Log.d(TAG, "  tokens: $tokensPath")
+        Log.d(TAG, "  language: ${if (language.isEmpty()) "auto-detect" else language}")
+
+        val whisperConfig = OfflineWhisperModelConfig(
+            encoder = encoderPath,
+            decoder = decoderPath,
+            language = language, // User-selected or empty for auto-detect
+            task = "transcribe",
+            tailPaddings = 1000
+        )
+
+        val modelConfig = OfflineModelConfig(
+            whisper = whisperConfig,
+            tokens = tokensPath,
+            numThreads = 4, // More threads for larger model
+            debug = true,
+            modelType = "whisper"
+        )
+
+        val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
+        Log.d(TAG, "Feature config: sampleRate=$SAMPLE_RATE, featureDim=80 (Distil Whisper Large v3)")
+
+        return OfflineRecognizerConfig(
+            featConfig = featConfig,
+            modelConfig = modelConfig,
+            decodingMethod = "greedy_search"
+        )
+    }
+
+    /**
+     * Create config for NVIDIA Parakeet TDT 0.6B v3 model (int8 quantized)
+     * CRITICAL: Uses featureDim=128 for transducer models (not 80 like Whisper)
+     */
+    private fun createParakeetConfig(modelDir: File): OfflineRecognizerConfig {
+        val encoderPath = File(modelDir, "encoder.int8.onnx").absolutePath
+        val decoderPath = File(modelDir, "decoder.int8.onnx").absolutePath
+        val joinerPath = File(modelDir, "joiner.int8.onnx").absolutePath
+        val tokensPath = File(modelDir, "tokens.txt").absolutePath
+
+        Log.d(TAG, "Parakeet TDT 0.6B v3 config paths:")
+        Log.d(TAG, "  encoder: $encoderPath")
+        Log.d(TAG, "  decoder: $decoderPath")
+        Log.d(TAG, "  joiner: $joinerPath")
+        Log.d(TAG, "  tokens: $tokensPath")
+
+        val transducerConfig = OfflineTransducerModelConfig(
+            encoder = encoderPath,
+            decoder = decoderPath,
+            joiner = joinerPath
+        )
+
+        val modelConfig = OfflineModelConfig(
+            transducer = transducerConfig,
+            tokens = tokensPath,
+            numThreads = 4, // More threads for larger model
+            debug = true,
+            modelType = "transducer"
+        )
+
+        // CRITICAL: Parakeet uses 128-dimensional mel features, NOT 80
+        val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 128)
+        Log.d(TAG, "Feature config: sampleRate=$SAMPLE_RATE, featureDim=128 (Parakeet TDT 1.1B)")
+
+        return OfflineRecognizerConfig(
+            featConfig = featConfig,
+            modelConfig = modelConfig,
+            decodingMethod = "greedy_search"
+        )
+    }
+
+    /**
      * Read WAV file and return float samples
      */
     private fun readWavFile(file: File): FloatArray {
@@ -323,17 +514,31 @@ class LocalTranscriptionService @Inject constructor(
 
         // Check for essential files based on model type
         return when (model.id) {
+            "whisper-tiny-en" -> {
+                File(modelDir, "tiny.en-encoder.onnx").exists() &&
+                File(modelDir, "tiny.en-decoder.onnx").exists() &&
+                File(modelDir, "tiny.en-tokens.txt").exists()
+            }
             "whisper-small" -> {
-                // Whisper Small multilingual model files
                 File(modelDir, "small-encoder.int8.onnx").exists() &&
                 File(modelDir, "small-decoder.int8.onnx").exists() &&
                 File(modelDir, "small-tokens.txt").exists()
             }
-            "whisper-tiny-en" -> {
-                // Whisper Tiny English model files
-                File(modelDir, "tiny.en-encoder.onnx").exists() &&
-                File(modelDir, "tiny.en-decoder.onnx").exists() &&
-                File(modelDir, "tiny.en-tokens.txt").exists()
+            "whisper-medium" -> {
+                File(modelDir, "medium-encoder.int8.onnx").exists() &&
+                File(modelDir, "medium-decoder.int8.onnx").exists() &&
+                File(modelDir, "medium-tokens.txt").exists()
+            }
+            "distil-whisper-large-v3" -> {
+                File(modelDir, "distil-large-v3-encoder.int8.onnx").exists() &&
+                File(modelDir, "distil-large-v3-decoder.int8.onnx").exists() &&
+                File(modelDir, "distil-large-v3-tokens.txt").exists()
+            }
+            "parakeet-tdt-0.6b" -> {
+                File(modelDir, "encoder.int8.onnx").exists() &&
+                File(modelDir, "decoder.int8.onnx").exists() &&
+                File(modelDir, "joiner.int8.onnx").exists() &&
+                File(modelDir, "tokens.txt").exists()
             }
             else -> false
         }
@@ -344,8 +549,11 @@ class LocalTranscriptionService @Inject constructor(
      */
     fun getModelSize(model: LocalModel): Long {
         return when (model.id) {
-            "whisper-small" -> 640_000_000L // ~640MB
             "whisper-tiny-en" -> 40_000_000L // ~40MB
+            "parakeet-tdt-0.6b" -> 490_000_000L // ~490MB (int8 quantized)
+            "whisper-small" -> 460_000_000L // ~460MB
+            "distil-whisper-large-v3" -> 1_000_000_000L // ~1GB
+            "whisper-medium" -> 1_500_000_000L // ~1.5GB
             else -> 0L
         }
     }
@@ -355,8 +563,11 @@ class LocalTranscriptionService @Inject constructor(
      */
     fun getModelDownloadUrl(model: LocalModel): String {
         return when (model.id) {
-            "whisper-small" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2"
             "whisper-tiny-en" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2"
+            "parakeet-tdt-0.6b" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2"
+            "whisper-small" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2"
+            "whisper-medium" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-medium.tar.bz2"
+            "distil-whisper-large-v3" -> "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-distil-large-v3.tar.bz2"
             else -> ""
         }
     }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlin.math.sqrt
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -44,6 +45,10 @@ class AudioRecorder @Inject constructor(
 
     private val _state = MutableStateFlow(RecordingState.IDLE)
     val state: StateFlow<RecordingState> = _state.asStateFlow()
+
+    // Audio amplitude for waveform visualization (0.0 to 1.0)
+    private val _amplitudeFlow = MutableStateFlow(0f)
+    val amplitudeFlow: StateFlow<Float> = _amplitudeFlow.asStateFlow()
 
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
@@ -163,6 +168,8 @@ class AudioRecorder @Inject constructor(
     private fun writeAudioToFile(file: File, bufferSize: Int) {
         val buffer = ShortArray(bufferSize / 2)
         val audioData = mutableListOf<Short>()
+        var sampleCount = 0
+        val amplitudeUpdateInterval = SAMPLE_RATE / 10 // Update ~10 times per second
 
         while (isRecording) {
             val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
@@ -170,11 +177,40 @@ class AudioRecorder @Inject constructor(
                 for (i in 0 until read) {
                     audioData.add(buffer[i])
                 }
+
+                // Calculate and emit amplitude periodically
+                sampleCount += read
+                if (sampleCount >= amplitudeUpdateInterval) {
+                    val amplitude = calculateRMS(buffer, read)
+                    _amplitudeFlow.value = amplitude
+                    sampleCount = 0
+                }
             }
         }
 
+        // Reset amplitude when recording stops
+        _amplitudeFlow.value = 0f
+
         // Write WAV file
         writeWavFile(file, audioData.toShortArray())
+    }
+
+    /**
+     * Calculate RMS (Root Mean Square) amplitude from audio samples
+     * @return Normalized amplitude between 0.0 and 1.0
+     */
+    private fun calculateRMS(buffer: ShortArray, size: Int): Float {
+        if (size == 0) return 0f
+
+        var sum = 0.0
+        for (i in 0 until size) {
+            val sample = buffer[i].toDouble()
+            sum += sample * sample
+        }
+
+        val rms = sqrt(sum / size)
+        // Normalize to 0-1 range (short max value is 32768)
+        return (rms / 32768.0).toFloat().coerceIn(0f, 1f)
     }
 
     private fun writeWavFile(file: File, audioData: ShortArray) {

@@ -21,7 +21,11 @@ class TranscriptionRegistry @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository
 ) : TranscriptionService {
 
-    override suspend fun transcribe(audioFile: File, model: TranscriptionModel): TranscriptionResult {
+    override suspend fun transcribe(
+        audioFile: File,
+        model: TranscriptionModel,
+        language: String
+    ): TranscriptionResult {
         val isLocal = model.provider == ModelProvider.LOCAL
         val isPro = subscriptionRepository.isPro
 
@@ -43,8 +47,8 @@ class TranscriptionRegistry @Inject constructor(
             ModelProvider.OPENAI -> openaiService
         }
 
-        // Perform transcription
-        val result = service.transcribe(audioFile, model)
+        // Perform transcription with language setting
+        val result = service.transcribe(audioFile, model, language)
 
         // Track usage on success
         if (result is TranscriptionResult.Success) {

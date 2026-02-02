@@ -93,8 +93,9 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
 
-    // Sherpa-ONNX (local transcription - Parakeet v3 support)
-    implementation("com.bihe0832.android:lib-sherpa-onnx:6.25.12")
+    // Sherpa-ONNX (local transcription - Official v1.12.23 with Parakeet TDT v3 support)
+    // Using official AAR from https://github.com/k2-fsa/sherpa-onnx/releases
+    implementation(files("libs/sherpa-onnx-1.12.23.aar"))
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

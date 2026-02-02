@@ -16,6 +16,7 @@ import java.io.File
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.content.pm.ApplicationInfo
 
 private val Context.usageDataStore: DataStore<Preferences> by preferencesDataStore(name = "usage")
 
@@ -138,6 +139,10 @@ class UsageRepository @Inject constructor(
      * @return Pair of (canTranscribe, remainingMinutes)
      */
     suspend fun canTranscribe(isLocal: Boolean, isPro: Boolean): Pair<Boolean, Float> {
+        if (isDebuggable()) {
+            return Pair(true, Float.MAX_VALUE)
+        }
+
         if (isPro) {
             return Pair(true, Float.MAX_VALUE)
         }
@@ -168,6 +173,10 @@ class UsageRepository @Inject constructor(
         isLocal: Boolean,
         isPro: Boolean
     ): Pair<Boolean, String?> {
+        if (isDebuggable()) {
+            return Pair(true, null)
+        }
+
         if (isPro) {
             return Pair(true, null)
         }
@@ -232,5 +241,9 @@ class UsageRepository @Inject constructor(
      */
     suspend fun clearAll() {
         context.usageDataStore.edit { it.clear() }
+    }
+
+    private fun isDebuggable(): Boolean {
+        return (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 }

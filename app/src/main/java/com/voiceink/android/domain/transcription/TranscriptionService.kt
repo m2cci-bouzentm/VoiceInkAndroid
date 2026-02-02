@@ -19,7 +19,12 @@ interface TranscriptionService {
      * Transcribe audio from a file
      * @param audioFile The audio file to transcribe (WAV format, 16kHz, mono)
      * @param model The model to use for transcription
+     * @param language Optional language code for transcription (e.g., "en", "es", "auto")
      * @return TranscriptionResult containing the transcribed text or error
      */
-    suspend fun transcribe(audioFile: File, model: TranscriptionModel): TranscriptionResult
+    suspend fun transcribe(
+        audioFile: File,
+        model: TranscriptionModel,
+        language: String = "auto"
+    ): TranscriptionResult
 }

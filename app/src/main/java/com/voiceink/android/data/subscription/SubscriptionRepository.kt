@@ -41,15 +41,22 @@ data class SubscriptionStatus(
 class SubscriptionRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val defaultTier: SubscriptionTier = if (isDebuggable()) {
+        SubscriptionTier.PRO
+    } else {
+        SubscriptionTier.FREE
+    }
+
     private val _subscriptionStatus = MutableStateFlow(
-        SubscriptionStatus(tier = SubscriptionTier.FREE)
+        SubscriptionStatus(tier = defaultTier)
     )
     val subscriptionStatus: StateFlow<SubscriptionStatus> = _subscriptionStatus.asStateFlow()
 
+    private val _currentTier = MutableStateFlow(defaultTier)
     /**
      * Current subscription tier
      */
-    val currentTier: StateFlow<SubscriptionTier> = MutableStateFlow(SubscriptionTier.FREE)
+    val currentTier: StateFlow<SubscriptionTier> = _currentTier.asStateFlow()
 
     /**
      * Quick check if user has pro subscription
@@ -92,6 +99,7 @@ class SubscriptionRepository @Inject constructor(
      */
     fun setTier(tier: SubscriptionTier) {
         _subscriptionStatus.value = _subscriptionStatus.value.copy(tier = tier)
+        _currentTier.value = tier
     }
 
     /**
@@ -102,6 +110,10 @@ class SubscriptionRepository @Inject constructor(
             SubscriptionTier.PRO -> true // Pro has all features
             SubscriptionTier.FREE -> feature.availableInFree
         }
+    }
+
+    private fun isDebuggable(): Boolean {
+        return (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 }
 

@@ -9,7 +9,10 @@ import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.LocalModel
 import com.voiceink.android.domain.model.PredefinedModels
 import com.voiceink.android.domain.model.TranscriptionModel
+import com.voiceink.android.domain.postprocessing.AIEnhancementService
 import com.voiceink.android.domain.postprocessing.AutoPunctuationService
+import com.voiceink.android.domain.postprocessing.EnhancementResult
+import com.voiceink.android.domain.postprocessing.EnhancementType
 import com.voiceink.android.domain.transcription.TranscriptionRegistry
 import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,8 +23,11 @@ import javax.inject.Inject
 
 data class HomeUiState(
     val transcription: String = "",
+    val enhancedText: String? = null,
     val error: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isEnhancing: Boolean = false,
+    val activeEnhancement: EnhancementType? = null
 )
 
 @HiltViewModel
@@ -30,7 +36,8 @@ class HomeViewModel @Inject constructor(
     private val transcriptionRegistry: TranscriptionRegistry,
     private val settingsRepository: SettingsRepository,
     private val historyRepository: TranscriptionHistoryRepository,
-    private val autoPunctuationService: AutoPunctuationService
+    private val autoPunctuationService: AutoPunctuationService,
+    private val aiEnhancementService: AIEnhancementService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -48,6 +55,16 @@ class HomeViewModel @Inject constructor(
             initialValue = PredefinedModels.gemini25Flash
         )
 
+    private val selectedLanguage: StateFlow<String> = settingsRepository.selectedLanguage
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "auto"
+        )
+
+    // Audio amplitude for waveform visualization
+    val audioAmplitude: StateFlow<Float> = audioRecorder.amplitudeFlow
+
     fun hasPermission(): Boolean = audioRecorder.hasPermission()
 
     fun toggleRecording() {
@@ -64,9 +81,50 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             if (recordingState.value == RecordingState.RECORDING) {
                 audioRecorder.cancelRecording()
-                _uiState.update { it.copy(error = null, transcription = "") }
+                _uiState.update { it.copy(error = null, transcription = "", enhancedText = null) }
             }
         }
+    }
+
+    /**
+     * Enhance the current transcription with the specified enhancement type
+     */
+    fun enhanceText(type: EnhancementType) {
+        val transcription = _uiState.value.transcription
+        if (transcription.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isEnhancing = true, activeEnhancement = type, enhancedText = null) }
+
+            when (val result = aiEnhancementService.enhance(transcription, type)) {
+                is EnhancementResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            enhancedText = result.text,
+                            isEnhancing = false,
+                            activeEnhancement = null,
+                            error = null
+                        )
+                    }
+                }
+                is EnhancementResult.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isEnhancing = false,
+                            activeEnhancement = null,
+                            error = result.message
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Clear the enhanced text and show original transcription
+     */
+    fun clearEnhancedText() {
+        _uiState.update { it.copy(enhancedText = null) }
     }
 
     private suspend fun startRecording() {
@@ -94,7 +152,8 @@ class HomeViewModel @Inject constructor(
 
         _uiState.update { it.copy(isLoading = true, error = null) }
 
-        when (val result = transcriptionRegistry.transcribe(audioFile, model)) {
+        val language = selectedLanguage.value
+        when (val result = transcriptionRegistry.transcribe(audioFile, model, language)) {
             is TranscriptionResult.Success -> {
                 var finalText = result.text
                 var hadAutoPunctuation = false

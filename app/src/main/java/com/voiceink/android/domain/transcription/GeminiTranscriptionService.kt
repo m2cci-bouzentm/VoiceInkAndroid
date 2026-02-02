@@ -4,6 +4,7 @@ import android.util.Base64
 import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.CloudModel
 import com.voiceink.android.domain.model.TranscriptionModel
+import com.voiceink.android.domain.model.WhisperLanguages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -28,7 +29,11 @@ class GeminiTranscriptionService @Inject constructor(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun transcribe(audioFile: File, model: TranscriptionModel): TranscriptionResult {
+    override suspend fun transcribe(
+        audioFile: File,
+        model: TranscriptionModel,
+        language: String
+    ): TranscriptionResult {
         return withContext(Dispatchers.IO) {
             try {
                 if (model !is CloudModel) {
@@ -43,12 +48,19 @@ class GeminiTranscriptionService @Inject constructor(
                 val audioBytes = audioFile.readBytes()
                 val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
 
+                val languageHint = if (language != "auto") {
+                    val languageName = WhisperLanguages.findByCode(language)?.name ?: language
+                    " The spoken language is $languageName."
+                } else {
+                    ""
+                }
+
                 val requestBody = GeminiRequest(
                     contents = listOf(
                         GeminiContent(
                             parts = listOf(
                                 GeminiPart(
-                                    text = "Transcribe this audio accurately. Return only the transcription, nothing else."
+                                    text = "Transcribe this audio accurately.$languageHint Return only the transcription, nothing else."
                                 ),
                                 GeminiPart(
                                     inlineData = GeminiInlineData(

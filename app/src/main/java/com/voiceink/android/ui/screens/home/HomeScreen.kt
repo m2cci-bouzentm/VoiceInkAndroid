@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.voiceink.android.data.audio.RecordingState
+import com.voiceink.android.ui.components.AudioLevelIndicator
+import com.voiceink.android.ui.components.EnhancementActionBar
 import com.voiceink.android.ui.theme.VoiceInkColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,6 +53,7 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val recordingState by viewModel.recordingState.collectAsState()
     val selectedModel by viewModel.selectedModel.collectAsState()
+    val audioAmplitude by viewModel.audioAmplitude.collectAsState()
 
     var showOverlayHint by remember { mutableStateOf(true) }
 
@@ -121,12 +124,23 @@ fun HomeScreen(
                 // Transcription result area
                 TranscriptionCard(
                     transcription = uiState.transcription,
+                    enhancedText = uiState.enhancedText,
                     error = uiState.error,
                     recordingState = recordingState,
+                    audioAmplitude = audioAmplitude,
+                    onClearEnhanced = { viewModel.clearEnhancedText() },
                     modifier = Modifier.weight(1f)
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                // Enhancement actions - show when transcription exists
+                EnhancementActionBar(
+                    visible = uiState.transcription.isNotBlank() && recordingState == RecordingState.IDLE,
+                    isEnhancing = uiState.isEnhancing,
+                    activeEnhancement = uiState.activeEnhancement,
+                    onEnhancementClick = { viewModel.enhanceText(it) }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Record button
                 PremiumRecordButton(
@@ -308,16 +322,23 @@ private fun ModelChip(
 @Composable
 private fun TranscriptionCard(
     transcription: String,
+    enhancedText: String?,
     error: String?,
     recordingState: RecordingState,
+    audioAmplitude: Float,
+    onClearEnhanced: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Determine which text to show
+    val displayText = enhancedText ?: transcription
+    val isShowingEnhanced = enhancedText != null
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .border(
                 width = 1.dp,
-                color = VoiceInkColors.GlassBorder,
+                color = if (isShowingEnhanced) VoiceInkColors.Primary.copy(alpha = 0.5f) else VoiceInkColors.GlassBorder,
                 shape = RoundedCornerShape(24.dp)
             ),
         shape = RoundedCornerShape(24.dp),
@@ -325,72 +346,102 @@ private fun TranscriptionCard(
             containerColor = VoiceInkColors.Surface
         )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-                .verticalScroll(rememberScrollState()),
-            contentAlignment = if (transcription.isEmpty()) Alignment.Center else Alignment.TopStart
-        ) {
-            if (transcription.isEmpty()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Enhanced text indicator
+            AnimatedVisibility(visible = isShowingEnhanced) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(VoiceInkColors.Primary.copy(alpha = 0.1f))
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    when {
-                        error != null -> {
-                            Text(
-                                text = error,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = VoiceInkColors.Error,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        recordingState == RecordingState.RECORDING -> {
-                            RecordingAnimation()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Listening...",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = VoiceInkColors.TextPrimary
-                            )
-                        }
-                        recordingState == RecordingState.PROCESSING -> {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = VoiceInkColors.Primary,
-                                strokeWidth = 3.dp
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Transcribing...",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = VoiceInkColors.TextPrimary
-                            )
-                        }
-                        else -> {
-                            Icon(
-                                Icons.Default.Mic,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = VoiceInkColors.TextMuted
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Tap to start recording",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = VoiceInkColors.TextMuted
-                            )
-                        }
+                    Text(
+                        text = "Enhanced",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = VoiceInkColors.Primary
+                    )
+                    TextButton(onClick = onClearEnhanced) {
+                        Text(
+                            text = "Show Original",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = VoiceInkColors.Primary
+                        )
                     }
                 }
-            } else {
-                SelectionContainer {
-                    Text(
-                        text = transcription,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = VoiceInkColors.TextPrimary,
-                        lineHeight = 28.sp
-                    )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                contentAlignment = if (displayText.isEmpty()) Alignment.Center else Alignment.TopStart
+            ) {
+                if (displayText.isEmpty()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        when {
+                            error != null -> {
+                                Text(
+                                    text = error,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = VoiceInkColors.Error,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            recordingState == RecordingState.RECORDING -> {
+                                AudioLevelIndicator(
+                                    amplitude = audioAmplitude,
+                                    size = 120.dp
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Listening...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = VoiceInkColors.TextPrimary
+                                )
+                            }
+                            recordingState == RecordingState.PROCESSING -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = VoiceInkColors.Primary,
+                                    strokeWidth = 3.dp
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Transcribing...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = VoiceInkColors.TextPrimary
+                                )
+                            }
+                            else -> {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = VoiceInkColors.TextMuted
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Tap to start recording",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = VoiceInkColors.TextMuted
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    SelectionContainer {
+                        Text(
+                            text = displayText,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = VoiceInkColors.TextPrimary,
+                            lineHeight = 28.sp
+                        )
+                    }
                 }
             }
         }

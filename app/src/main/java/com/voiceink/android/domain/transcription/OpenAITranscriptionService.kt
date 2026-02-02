@@ -28,7 +28,11 @@ class OpenAITranscriptionService @Inject constructor(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun transcribe(audioFile: File, model: TranscriptionModel): TranscriptionResult {
+    override suspend fun transcribe(
+        audioFile: File,
+        model: TranscriptionModel,
+        language: String
+    ): TranscriptionResult {
         return withContext(Dispatchers.IO) {
             try {
                 if (model !is CloudModel) {
@@ -41,7 +45,7 @@ class OpenAITranscriptionService @Inject constructor(
                 }
 
                 // OpenAI Whisper API uses multipart/form-data
-                val requestBody = MultipartBody.Builder()
+                val requestBuilder = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
                     .addFormDataPart(
                         "file",
@@ -50,7 +54,12 @@ class OpenAITranscriptionService @Inject constructor(
                     )
                     .addFormDataPart("model", model.modelIdentifier)
                     .addFormDataPart("response_format", "json")
-                    .build()
+
+                if (language != "auto") {
+                    requestBuilder.addFormDataPart("language", language)
+                }
+
+                val requestBody = requestBuilder.build()
 
                 val request = Request.Builder()
                     .url("https://api.openai.com/v1/audio/transcriptions")
