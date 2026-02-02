@@ -6,10 +6,12 @@ import android.inputmethodservice.InputMethodService
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -162,6 +164,12 @@ class VoiceInkInputMethodService : InputMethodService() {
         switchButton?.setOnClickListener {
             Log.d(TAG, "Switch button clicked")
             cancelAndClose()
+        }
+
+        switchButton?.setOnLongClickListener {
+            Log.d(TAG, "Switch button long-pressed")
+            showInputMethodPicker()
+            true
         }
 
         Log.d(TAG, "Input view created successfully")
@@ -361,8 +369,18 @@ class VoiceInkInputMethodService : InputMethodService() {
         stopRecording()
         isProcessing = false
         updateUI()
-        // Switch to previous input method
-        switchToPreviousInputMethod()
+        // Switch to previous input method; if unavailable, show picker
+        val switched = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            switchToPreviousInputMethod()
+        } else {
+            false
+        }
+        if (!switched) showInputMethodPicker()
+    }
+
+    private fun showInputMethodPicker() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showInputMethodPicker()
     }
 
     private fun saveToWavFile(): File? {

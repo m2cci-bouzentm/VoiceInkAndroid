@@ -150,12 +150,10 @@ data class CloudModel(
  * - Whisper params table (all Whisper sizes): https://huggingface.co/openai/whisper
  * - Distil Whisper Large v3 WER (LibriSpeech validation-clean) + params + rel. latency:
  *   https://huggingface.co/distil-whisper/distil-large-v3
- * - Parakeet v3 + cloud models (Gemini/OpenAI) medical benchmark:
- *   https://www.omi.me/blogs/voice-llm-benchmark
- * - Parakeet v3 model details (size/languages):
- *   https://k2-fsa.github.io/sherpa/onnx/pretrained_models/parakeet.html
- * - Whisper large-v2 model card (reference for OpenAI Whisper API context):
- *   https://huggingface.co/openai/whisper-large-v2
+ * - Parakeet v3 + cloud models (Gemini 2.5 Flash, OpenAI Whisper-1) medical benchmark:
+ *   https://omi.health/benchmarking-tts
+ * - Parakeet v3 model details (size/languages) + file sizes:
+ *   https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html
  *
  * UI uses coarse 1–5 bins (see ModelScoring) derived from these metrics.
  */
@@ -181,9 +179,9 @@ object PredefinedModels {
         downloadSizeMB = 40
     )
     
-    // Parakeet TDT 0.6B v3 - Multilingual (25 languages)
+    // Parakeet TDT 0.6B v3 - 25 European languages
     // Benchmarks: Omi Voice LLM Benchmark (PriMock57 medical set)
-    // Model details from sherpa-onnx Parakeet page
+    // Model details + file sizes from sherpa-onnx docs
     val parakeetTdt = LocalModel(
         id = "parakeet-tdt-0.6b",
         name = "Parakeet TDT 0.6B",

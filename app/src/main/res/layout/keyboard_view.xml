@@ -72,7 +72,7 @@
         android:layout_marginTop="12dp"
         android:paddingHorizontal="16dp"
         android:paddingVertical="8dp"
-        android:text="Switch keyboard"
+        android:text="Back to keyboard"
         android:textColor="#99FFFFFF"
         android:textSize="12sp"
         android:background="@drawable/ime_switch_button_bg"

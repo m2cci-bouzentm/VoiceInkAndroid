@@ -180,7 +180,7 @@ app/src/main/
 - Draggable floating microphone button that works from any app
 - Enable in Settings > Floating Button (requires "Display over other apps" permission)
 - Tap to start recording, tap again to stop and transcribe
-- Shows visual feedback: purple (idle), red (recording), spinner (processing)
+- Shows visual feedback: green (idle), red (recording), spinner (processing)
 - Auto-starts when app launches if previously enabled
 - Persists when app goes to background
 - **Direct text injection**: After transcription, text is inserted at cursor in focused app (if accessibility enabled)
@@ -229,13 +229,13 @@ Each model now shows **Accuracy** and **Speed** bars in Settings using published
 - Distil Whisper Large v3: Short-form WER 9.7, 756M params, rel. latency 6.3x  
   https://huggingface.co/distil-whisper/distil-large-v3  
 - Parakeet TDT 0.6B v3 (Omi benchmark): WER 11.9 (PriMock57 medical), avg 6.0s/file  
-  https://www.omi.me/blogs/voice-llm-benchmark  
+  https://omi.health/benchmarking-tts  
 - Gemini 2.5 Flash (Omi benchmark): WER 12.1 (PriMock57 medical), avg 20.0s/file  
-  https://www.omi.me/blogs/voice-llm-benchmark  
-- OpenAI Whisper (Omi benchmark): WER 15.5 (PriMock57 medical), avg 104.0s/file  
-  https://www.omi.me/blogs/voice-llm-benchmark  
-- Parakeet v3 model details (size/languages):  
-  https://k2-fsa.github.io/sherpa/onnx/pretrained_models/parakeet.html  
+  https://omi.health/benchmarking-tts  
+- OpenAI Whisper-1 (Omi benchmark): WER 15.5 (PriMock57 medical), avg 104.0s/file  
+  https://omi.health/benchmarking-tts  
+- Parakeet v3 model details (size/languages) + file sizes:  
+  https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html  
 
 **Scoring (UI bins, not a claim of precise ranking)**
 - Accuracy uses WER bins (lower is better): `<=2.0 → 5`, `<=3.0 → 4`, `<=4.5 → 3`, `<=7.0 → 2`, else `1`.
@@ -260,6 +260,7 @@ Each model now shows **Accuracy** and **Speed** bars in Settings using published
 - User switches to VoiceInk IME when they want to speak, then switches back to regular keyboard
 - Works in **any app** with text input - voice text inserted directly via `currentInputConnection`
 - More reliable than RecognitionService approach (OEM-restricted on Samsung and other devices)
+ - **Switching improved:** tapping "Back to keyboard" tries previous IME; if unavailable it opens the IME picker. Long-press always opens the IME picker.
 
 **Setup:** Settings → System → Languages & Input → On-screen keyboard → Manage keyboards → Enable VoiceInk
 

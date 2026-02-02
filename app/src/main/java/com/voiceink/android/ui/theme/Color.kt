@@ -4,14 +4,14 @@ import androidx.compose.ui.graphics.Color
 
 // Premium Dark Theme Colors
 object VoiceInkColors {
-    // Primary gradient colors (vibrant blue)
-    val Primary = Color(0xFF3B82F6)      // Blue-500
-    val PrimaryLight = Color(0xFF60A5FA) // Blue-400
-    val PrimaryDark = Color(0xFF2563EB)  // Blue-600
+    // Primary gradient colors (vibrant green)
+    val Primary = Color(0xFF22C55E)      // Green-500
+    val PrimaryLight = Color(0xFF4ADE80) // Green-400
+    val PrimaryDark = Color(0xFF16A34A)  // Green-600
     
-    // Secondary accent (cyan/teal for contrast)
-    val Secondary = Color(0xFF06B6D4)
-    val SecondaryLight = Color(0xFF22D3EE)
+    // Secondary accent (teal for contrast)
+    val Secondary = Color(0xFF14B8A6)
+    val SecondaryLight = Color(0xFF2DD4BF)
     
     // Background layers (rich dark)
     val Background = Color(0xFF0A0A0F)
@@ -41,9 +41,9 @@ object VoiceInkColors {
     val GlassBorder = Color(0x20FFFFFF)
     
     // Gradient colors for buttons/cards
-    val GradientStart = Color(0xFF3B82F6)  // Blue-500
-    val GradientMiddle = Color(0xFF2563EB) // Blue-600
-    val GradientEnd = Color(0xFF1D4ED8)    // Blue-700
+    val GradientStart = Color(0xFF4ADE80)  // Green-400
+    val GradientMiddle = Color(0xFF22C55E) // Green-500
+    val GradientEnd = Color(0xFF15803D)    // Green-700
 }
 
 // Keep these for Material3 compatibility
