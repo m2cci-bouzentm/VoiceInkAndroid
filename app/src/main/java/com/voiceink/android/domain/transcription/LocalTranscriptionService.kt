@@ -429,7 +429,7 @@ class LocalTranscriptionService @Inject constructor(
 
     /**
      * Create config for NVIDIA Parakeet TDT 0.6B v3 model (int8 quantized)
-     * CRITICAL: Uses featureDim=128 for transducer models (not 80 like Whisper)
+     * NOTE: Parakeet v3 uses nemo_transducer model type and feature_dim=80 per sherpa-onnx docs.
      */
     private fun createParakeetConfig(modelDir: File): OfflineRecognizerConfig {
         val encoderPath = File(modelDir, "encoder.int8.onnx").absolutePath
@@ -454,12 +454,12 @@ class LocalTranscriptionService @Inject constructor(
             tokens = tokensPath,
             numThreads = 4, // More threads for larger model
             debug = true,
-            modelType = "transducer"
+            modelType = "nemo_transducer"
         )
 
-        // CRITICAL: Parakeet uses 128-dimensional mel features, NOT 80
-        val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 128)
-        Log.d(TAG, "Feature config: sampleRate=$SAMPLE_RATE, featureDim=128 (Parakeet TDT 1.1B)")
+        // Parakeet v3 uses 80-dimensional mel features (per sherpa-onnx docs)
+        val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
+        Log.d(TAG, "Feature config: sampleRate=$SAMPLE_RATE, featureDim=80 (Parakeet TDT 0.6B v3)")
 
         return OfflineRecognizerConfig(
             featConfig = featConfig,
@@ -550,7 +550,7 @@ class LocalTranscriptionService @Inject constructor(
     fun getModelSize(model: LocalModel): Long {
         return when (model.id) {
             "whisper-tiny-en" -> 40_000_000L // ~40MB
-            "parakeet-tdt-0.6b" -> 490_000_000L // ~490MB (int8 quantized)
+            "parakeet-tdt-0.6b" -> 640_000_000L // ~640MB (int8 quantized)
             "whisper-small" -> 460_000_000L // ~460MB
             "distil-whisper-large-v3" -> 1_000_000_000L // ~1GB
             "whisper-medium" -> 1_500_000_000L // ~1.5GB

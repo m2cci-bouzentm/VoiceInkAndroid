@@ -192,6 +192,15 @@ app/src/main/
 - Requires a Gemini API key; otherwise returns original text
 - Cloud model transcriptions skip this step
 - Settings includes an info tooltip explaining the above
+ - Applied consistently in Home, Overlay, and IME flows
+
+### UX Improvements
+- Cloud models now **require API keys** to be selectable (prevents selecting a model that will fail at runtime).
+- Auto‑punctuation toggle is disabled when a cloud model is selected.
+- IME switching: tap tries previous keyboard; long‑press opens the IME picker.
+- IME idle hint now explains the long‑press picker shortcut.
+- App theme palette shifted from blue/purple to green.
+- Recording: disables starting a new recording while transcription is in progress (Home + Overlay).
 
 ### Language Selection (Local + Cloud)
 - Language selector shown for local Whisper models that support it and for cloud models
@@ -438,16 +447,23 @@ val modelConfig = OfflineModelConfig(
 W sherpa-onnx: feat_dim=128          <- Model expects 128
 W sherpa-onnx: model_type=EncDecRNNTBPEModel
 ```
-**Solution:** Use different `featureDim` values for different models:
+**Update:** Parakeet TDT 0.6B v3 uses **nemo_transducer** and **feature_dim=80** per sherpa-onnx docs.
+**Solution:** Set `modelType = "nemo_transducer"` and `featureDim = 80` for Parakeet v3.
 ```kotlin
-// For Parakeet TDT v3 (128-dim features):
-val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 128)
+// For Parakeet TDT 0.6B v3:
+val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
+val modelConfig = OfflineModelConfig(
+    transducer = transducerConfig,
+    tokens = File(modelDir, "tokens.txt").absolutePath,
+    numThreads = 4,
+    modelType = "nemo_transducer"
+)
 
 // For Whisper (80-dim features):
 val featConfig = getFeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80)
 ```
 
-**Tip:** Always check the model's metadata in logcat (`feat_dim=X`) to determine correct feature dimension.
+**Tip:** Always check the model’s docs/metadata to confirm `modelType` and `feature_dim`.
 
 ### Issue 15: Parakeet v3 Re-enabled
 **Symptom:** Parakeet was previously disabled due to export metadata issues.

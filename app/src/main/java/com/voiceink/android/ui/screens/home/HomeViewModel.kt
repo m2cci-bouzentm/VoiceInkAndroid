@@ -18,6 +18,7 @@ import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import javax.inject.Inject
 
@@ -65,6 +66,9 @@ class HomeViewModel @Inject constructor(
     // Audio amplitude for waveform visualization
     val audioAmplitude: StateFlow<Float> = audioRecorder.amplitudeFlow
 
+    private var transcriptionJob: kotlinx.coroutines.Job? = null
+    private var currentAudioFile: File? = null
+
     fun hasPermission(): Boolean = audioRecorder.hasPermission()
 
     fun toggleRecording() {
@@ -82,6 +86,12 @@ class HomeViewModel @Inject constructor(
             if (recordingState.value == RecordingState.RECORDING) {
                 audioRecorder.cancelRecording()
                 _uiState.update { it.copy(error = null, transcription = "", enhancedText = null) }
+            } else if (_uiState.value.isLoading) {
+                transcriptionJob?.cancel()
+                transcriptionJob = null
+                currentAudioFile?.delete()
+                currentAudioFile = null
+                _uiState.update { it.copy(isLoading = false, error = null) }
             }
         }
     }
@@ -151,42 +161,52 @@ class HomeViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(isLoading = true, error = null) }
+        currentAudioFile = audioFile
 
-        val language = selectedLanguage.value
-        when (val result = transcriptionRegistry.transcribe(audioFile, model, language)) {
-            is TranscriptionResult.Success -> {
-                var finalText = result.text
-                var hadAutoPunctuation = false
+        transcriptionJob = viewModelScope.launch {
+            try {
+                val language = selectedLanguage.value
+                when (val result = transcriptionRegistry.transcribe(audioFile, model, language)) {
+                    is TranscriptionResult.Success -> {
+                        var finalText = result.text
+                        var hadAutoPunctuation = false
 
-                // Apply auto-punctuation for local models if enabled
-                if (model is LocalModel && settingsRepository.autoPunctuationEnabled.first()) {
-                    finalText = autoPunctuationService.punctuate(result.text)
-                    hadAutoPunctuation = finalText != result.text
+                        // Apply auto-punctuation for local models if enabled
+                        if (model is LocalModel && settingsRepository.autoPunctuationEnabled.first()) {
+                            finalText = autoPunctuationService.punctuate(result.text)
+                            hadAutoPunctuation = finalText != result.text
+                        }
+
+                        // Save to history before deleting the audio file
+                        saveToHistory(finalText, model, audioFile, hadAutoPunctuation)
+
+                        _uiState.update {
+                            it.copy(
+                                transcription = finalText,
+                                isLoading = false,
+                                error = null
+                            )
+                        }
+                    }
+                    is TranscriptionResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = result.message
+                            )
+                        }
+                    }
                 }
-
-                // Save to history before deleting the audio file
-                saveToHistory(finalText, model, audioFile, hadAutoPunctuation)
-
-                _uiState.update {
-                    it.copy(
-                        transcription = finalText,
-                        isLoading = false,
-                        error = null
-                    )
-                }
-            }
-            is TranscriptionResult.Error -> {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = result.message
-                    )
-                }
+            } catch (e: CancellationException) {
+                // User cancelled; keep UI quiet
+                _uiState.update { it.copy(isLoading = false, error = null) }
+                throw e
+            } finally {
+                audioFile.delete()
+                currentAudioFile = null
+                transcriptionJob = null
             }
         }
-
-        // Cleanup the audio file
-        audioFile.delete()
     }
 
     private suspend fun saveToHistory(

@@ -225,8 +225,7 @@ fun SettingsScreen(
                     model is CloudModel && model.provider == ModelProvider.OPENAI -> uiState.openaiApiKey.isNotBlank()
                     else -> true
                 }
-                val isPro = uiState.subscriptionTier == SubscriptionTier.PRO
-                val canUseCloudModel = hasRequiredApiKey || isPro
+                val canUseCloudModel = hasRequiredApiKey
                 
                 ModelItem(
                     model = model,
@@ -338,12 +337,18 @@ fun SettingsScreen(
                     
                     SettingsDivider()
                     
+                    val isLocalModelSelected = selectedModel is LocalModel
+                    val autoPunctuationSubtitle = when {
+                        !isLocalModelSelected -> "Only for local models"
+                        uiState.geminiApiKey.isBlank() -> "Requires Gemini API key"
+                        else -> "AI-powered formatting"
+                    }
                     SettingsToggleRow(
                         title = "Auto-Punctuation",
-                        subtitle = if (uiState.geminiApiKey.isBlank()) "Requires Gemini API key" else "AI-powered formatting",
+                        subtitle = autoPunctuationSubtitle,
                         infoText = "Runs after local model transcriptions. Uses Gemini 2.0 Flash to add punctuation and capitalization. Requires a Gemini API key; if missing or it fails, text stays unchanged. Cloud models skip this step.",
-                        isChecked = uiState.isAutoPunctuationEnabled && uiState.geminiApiKey.isNotBlank(),
-                        enabled = uiState.geminiApiKey.isNotBlank() || uiState.subscriptionTier == SubscriptionTier.PRO,
+                        isChecked = uiState.isAutoPunctuationEnabled && isLocalModelSelected && uiState.geminiApiKey.isNotBlank(),
+                        enabled = isLocalModelSelected && uiState.geminiApiKey.isNotBlank(),
                         onCheckedChange = { viewModel.setAutoPunctuationEnabled(it) }
                     )
                 }
@@ -629,6 +634,14 @@ private fun ModelItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (model is CloudModel && !isEnabled) {
+                    Text(
+                        text = "API key required",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = VoiceInkColors.Warning
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(6.dp))
 

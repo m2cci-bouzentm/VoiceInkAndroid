@@ -44,7 +44,9 @@ data class ModelBenchmark(
     val paramsM: Int? = null,
     val rtfx: Double? = null,
     val relativeLatency: Double? = null,
-    val avgSecPerFile: Double? = null
+    val avgSecPerFile: Double? = null,
+    val tokensPerSecond: Double? = null,
+    val ttftMs: Double? = null
 )
 
 /**
@@ -64,6 +66,16 @@ object ModelScoring {
     }
 
     fun speedScore(benchmark: ModelBenchmark?): Int? {
+        benchmark?.tokensPerSecond?.let { tps ->
+            return when {
+                tps >= 200 -> 5
+                tps >= 100 -> 4
+                tps >= 50 -> 3
+                tps >= 20 -> 2
+                else -> 1
+            }
+        }
+
         benchmark?.rtfx?.let { rtfx ->
             return when {
                 rtfx >= 1000 -> 5

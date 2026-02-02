@@ -30,7 +30,9 @@ import com.voiceink.android.data.audio.RecordingState
 import com.voiceink.android.data.history.TranscriptionHistoryRepository
 import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.PredefinedModels
+import com.voiceink.android.domain.model.LocalModel
 import com.voiceink.android.domain.model.TranscriptionModel
+import com.voiceink.android.domain.postprocessing.AutoPunctuationService
 import com.voiceink.android.domain.transcription.TranscriptionRegistry
 import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.android.AndroidEntryPoint
@@ -108,8 +110,12 @@ class OverlayService : Service() {
     @Inject
     lateinit var historyRepository: TranscriptionHistoryRepository
 
+    @Inject
+    lateinit var autoPunctuationService: AutoPunctuationService
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var currentRecordingFile: File? = null
+    private var isTranscribing = false
 
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
@@ -370,6 +376,15 @@ class OverlayService : Service() {
 
     private fun toggleRecording() {
         serviceScope.launch {
+            if (isTranscribing) {
+                Toast.makeText(
+                    this@OverlayService,
+                    "Transcription in progress. Please wait.",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+
             when (audioRecorder.state.value) {
                 RecordingState.IDLE -> {
                     if (!audioRecorder.hasPermission()) {
@@ -404,11 +419,13 @@ class OverlayService : Service() {
         if (audioFile != null && audioFile.exists()) {
             // Show processing state on overlay while transcribing
             updateOverlayUI(RecordingState.PROCESSING)
+            isTranscribing = true
             try {
                 transcribeAudio(audioFile)
             } finally {
                 // Always reset to idle after transcription (success or failure)
                 updateOverlayUI(RecordingState.IDLE)
+                isTranscribing = false
             }
         }
     }
@@ -426,23 +443,31 @@ class OverlayService : Service() {
 
             when (result) {
                 is TranscriptionResult.Success -> {
-                    Log.d(TAG, "Transcription successful: ${result.text}")
+                    var finalText = result.text
+                    var hadAutoPunctuation = false
+
+                    if (model is LocalModel && settingsRepository.autoPunctuationEnabled.first()) {
+                        finalText = autoPunctuationService.punctuate(result.text)
+                        hadAutoPunctuation = finalText != result.text
+                    }
+
+                    Log.d(TAG, "Transcription successful: $finalText")
 
                     // Save to history before deleting the audio file
-                    saveToHistory(result.text, model, audioFile)
+                    saveToHistory(finalText, model, audioFile, hadAutoPunctuation)
 
                     // Try to inject text into focused field
                     if (TextInjectionService.isServiceEnabled()) {
-                        val injected = TextInjectionService.injectText(result.text)
+                        val injected = TextInjectionService.injectText(finalText)
                         if (injected) {
                             Log.d(TAG, "Text injected successfully")
                         } else {
                             Log.d(TAG, "Text injection failed, copying to clipboard")
-                            copyToClipboard(result.text)
+                            copyToClipboard(finalText)
                         }
                     } else {
                         // Accessibility not enabled, copy to clipboard
-                        copyToClipboard(result.text)
+                        copyToClipboard(finalText)
                     }
                 }
                 is TranscriptionResult.Error -> {
@@ -457,14 +482,19 @@ class OverlayService : Service() {
         audioFile.delete()
     }
 
-    private suspend fun saveToHistory(text: String, model: TranscriptionModel, audioFile: File) {
+    private suspend fun saveToHistory(
+        text: String,
+        model: TranscriptionModel,
+        audioFile: File,
+        hadAutoPunctuation: Boolean
+    ) {
         try {
             historyRepository.save(
                 text = text,
                 model = model,
                 audioFile = audioFile,
                 wasStreaming = false,
-                hadAutoPunctuation = false
+                hadAutoPunctuation = hadAutoPunctuation
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save to history", e)

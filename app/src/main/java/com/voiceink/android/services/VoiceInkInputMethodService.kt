@@ -21,6 +21,8 @@ import com.voiceink.android.data.history.TranscriptionHistoryRepository
 import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.PredefinedModels
 import com.voiceink.android.domain.model.TranscriptionModel
+import com.voiceink.android.domain.model.LocalModel
+import com.voiceink.android.domain.postprocessing.AutoPunctuationService
 import com.voiceink.android.domain.transcription.TranscriptionRegistry
 import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.EntryPoint
@@ -58,11 +60,13 @@ class VoiceInkInputMethodService : InputMethodService() {
         fun transcriptionRegistry(): TranscriptionRegistry
         fun settingsRepository(): SettingsRepository
         fun historyRepository(): TranscriptionHistoryRepository
+        fun autoPunctuationService(): AutoPunctuationService
     }
 
     private lateinit var transcriptionRegistry: TranscriptionRegistry
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var historyRepository: TranscriptionHistoryRepository
+    private lateinit var autoPunctuationService: AutoPunctuationService
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -96,6 +100,7 @@ class VoiceInkInputMethodService : InputMethodService() {
         transcriptionRegistry = entryPoint.transcriptionRegistry()
         settingsRepository = entryPoint.settingsRepository()
         historyRepository = entryPoint.historyRepository()
+        autoPunctuationService = entryPoint.autoPunctuationService()
 
         Log.d(TAG, "VoiceInk IME created successfully")
     }
@@ -282,13 +287,21 @@ class VoiceInkInputMethodService : InputMethodService() {
 
                 when (result) {
                     is TranscriptionResult.Success -> {
-                        Log.d(TAG, "Transcription success: ${result.text}")
+                        var finalText = result.text
+                        var hadAutoPunctuation = false
+
+                        if (model is LocalModel && settingsRepository.autoPunctuationEnabled.first()) {
+                            finalText = autoPunctuationService.punctuate(result.text)
+                            hadAutoPunctuation = finalText != result.text
+                        }
+
+                        Log.d(TAG, "Transcription success: $finalText")
 
                         // Save to history before deleting audio file
-                        saveToHistory(result.text, model, audioFile)
+                        saveToHistory(finalText, model, audioFile, hadAutoPunctuation)
 
                         // Insert text into the focused text field
-                        currentInputConnection?.commitText(result.text, 1)
+                        currentInputConnection?.commitText(finalText, 1)
                         statusText?.text = "Tap to speak"
                     }
                     is TranscriptionResult.Error -> {
@@ -333,7 +346,7 @@ class VoiceInkInputMethodService : InputMethodService() {
                     statusText?.text = "Tap to speak"
                     micButton?.setBackgroundResource(R.drawable.overlay_button_background)
                     cancelButton?.visibility = View.GONE
-                    hintText?.text = "Double-tap to clear"
+                    hintText?.text = "Double-tap to clear • Hold Back to choose keyboard"
                 }
             }
         }
@@ -351,14 +364,19 @@ class VoiceInkInputMethodService : InputMethodService() {
         Log.d(TAG, "Recording aborted")
     }
 
-    private suspend fun saveToHistory(text: String, model: TranscriptionModel, audioFile: File) {
+    private suspend fun saveToHistory(
+        text: String,
+        model: TranscriptionModel,
+        audioFile: File,
+        hadAutoPunctuation: Boolean
+    ) {
         try {
             historyRepository.save(
                 text = text,
                 model = model,
                 audioFile = audioFile,
                 wasStreaming = false,
-                hadAutoPunctuation = false
+                hadAutoPunctuation = hadAutoPunctuation
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save to history", e)

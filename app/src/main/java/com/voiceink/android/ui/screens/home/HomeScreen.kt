@@ -41,6 +41,7 @@ import com.voiceink.android.data.audio.RecordingState
 import com.voiceink.android.ui.components.AudioLevelIndicator
 import com.voiceink.android.ui.components.EnhancementActionBar
 import com.voiceink.android.ui.theme.VoiceInkColors
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,21 +134,34 @@ fun HomeScreen(
                 )
 
                 // Enhancement actions - show when transcription exists
-                EnhancementActionBar(
-                    visible = uiState.transcription.isNotBlank() && recordingState == RecordingState.IDLE,
-                    isEnhancing = uiState.isEnhancing,
-                    activeEnhancement = uiState.activeEnhancement,
-                    onEnhancementClick = { viewModel.enhanceText(it) }
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    EnhancementActionBar(
+                        visible = uiState.transcription.isNotBlank() && recordingState == RecordingState.IDLE,
+                        isEnhancing = uiState.isEnhancing,
+                        activeEnhancement = uiState.activeEnhancement,
+                        onEnhancementClick = { viewModel.enhanceText(it) }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Record button
+                val isProcessing = recordingState == RecordingState.PROCESSING || uiState.isLoading
                 PremiumRecordButton(
                     isRecording = recordingState == RecordingState.RECORDING,
-                    isProcessing = recordingState == RecordingState.PROCESSING,
+                    isProcessing = isProcessing,
                     onClick = {
-                        if (viewModel.hasPermission()) {
+                        if (uiState.isLoading) {
+                            Toast.makeText(
+                                context,
+                                "Transcription in progress. Please wait.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else if (viewModel.hasPermission()) {
                             viewModel.toggleRecording()
                         } else {
                             audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -376,12 +390,12 @@ private fun TranscriptionCard(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                contentAlignment = if (displayText.isEmpty()) Alignment.Center else Alignment.TopStart
             ) {
                 if (displayText.isEmpty()) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         when {
                             error != null -> {
@@ -434,13 +448,21 @@ private fun TranscriptionCard(
                         }
                     }
                 } else {
-                    SelectionContainer {
-                        Text(
-                            text = displayText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = VoiceInkColors.TextPrimary,
-                            lineHeight = 28.sp
-                        )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Top
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = displayText,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = VoiceInkColors.TextPrimary,
+                                lineHeight = 28.sp
+                            )
+                        }
                     }
                 }
             }
@@ -629,36 +651,48 @@ private fun PremiumRecordButton(
             }
         }
 
-        // Cancel text - shown when recording
-        AnimatedVisibility(
-            visible = isRecording,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it }
+        // Cancel text - shown when recording or processing
+        Box(
+            modifier = Modifier
+                .height(36.dp)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            TextButton(
-                onClick = onCancel,
-                modifier = Modifier.padding(top = 12.dp)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isRecording || isProcessing,
+                enter = fadeIn(),
+                exit = fadeOut()
             ) {
-                Text(
-                    text = "Cancel",
-                    color = VoiceInkColors.Error,
-                    style = MaterialTheme.typography.labelLarge
-                )
+                TextButton(
+                    onClick = onCancel
+                ) {
+                    Text(
+                        text = "Cancel",
+                        color = VoiceInkColors.Error,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
 
-        // Hint text
-        AnimatedVisibility(
-            visible = isRecording,
-            enter = fadeIn(),
-            exit = fadeOut()
+        // Hint text (reserve space to prevent layout jumps)
+        Box(
+            modifier = Modifier
+                .height(20.dp)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Long-press to cancel",
-                color = VoiceInkColors.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isRecording || isProcessing,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Text(
+                    text = if (isProcessing) "Transcribing..." else "Long-press to cancel",
+                    color = VoiceInkColors.TextMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
