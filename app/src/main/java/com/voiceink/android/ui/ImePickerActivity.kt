@@ -1,6 +1,8 @@
 package com.voiceink.android.ui
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -9,10 +11,11 @@ import androidx.activity.ComponentActivity
 
 class ImePickerActivity : ComponentActivity() {
 
-    private val finishHandler = android.os.Handler(mainLooper)
+    private lateinit var finishHandler: Handler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        finishHandler = Handler(Looper.getMainLooper())
 
         // Minimal, transparent window that doesn't cover the screen.
         setContentView(View(this))

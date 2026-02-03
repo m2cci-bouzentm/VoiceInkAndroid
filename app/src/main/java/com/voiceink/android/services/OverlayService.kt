@@ -143,6 +143,9 @@ class OverlayService : Service() {
         lastTapTime = 0L
         toggleRecording()
     }
+    private val overlayRetryHandler = Handler(Looper.getMainLooper())
+    private val overlayRetryDelayMs = 300L
+    private val overlayRetryMaxAttempts = 10
 
     // Long-press detection for cancel/clear
     private val longPressHandler = Handler(Looper.getMainLooper())
@@ -544,18 +547,38 @@ class OverlayService : Service() {
             Log.e(TAG, "Failed to launch IME picker activity", e)
             Toast.makeText(this, "Unable to open keyboard picker", Toast.LENGTH_SHORT).show()
         }
-        tapHandler.postDelayed({ ensureOverlayVisible() }, 300L)
+        scheduleOverlayEnsure()
     }
 
     private fun ensureOverlayVisible() {
+        if (overlayView == null) {
+            createOverlayButton()
+            return
+        }
+
         val view = overlayView ?: return
-        if (view.isAttachedToWindow) return
+        if (view.isAttachedToWindow || view.parent != null) return
         try {
             windowManager.addView(view, layoutParams)
             Log.d(TAG, "Overlay re-attached after IME picker")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to re-attach overlay view", e)
         }
+    }
+
+    private fun scheduleOverlayEnsure() {
+        overlayRetryHandler.removeCallbacksAndMessages(null)
+        var attempts = 0
+        val runnable = object : Runnable {
+            override fun run() {
+                ensureOverlayVisible()
+                attempts += 1
+                if (attempts < overlayRetryMaxAttempts) {
+                    overlayRetryHandler.postDelayed(this, overlayRetryDelayMs)
+                }
+            }
+        }
+        overlayRetryHandler.postDelayed(runnable, overlayRetryDelayMs)
     }
 
     private fun abortRecording() {
