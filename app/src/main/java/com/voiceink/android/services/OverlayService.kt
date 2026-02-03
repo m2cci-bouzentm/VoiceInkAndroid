@@ -138,15 +138,24 @@ class OverlayService : Service() {
     // Double-tap detection
     private var lastTapTime = 0L
     private val doubleTapTimeout = 300L // milliseconds
+    private val tapHandler = Handler(Looper.getMainLooper())
+    private val singleTapRunnable = Runnable {
+        lastTapTime = 0L
+        toggleRecording()
+    }
 
-    // Long-press detection for abort
+    // Long-press detection for cancel/clear
     private val longPressHandler = Handler(Looper.getMainLooper())
     private val longPressTimeout = 500L // milliseconds
     private var isLongPressTriggered = false
     private val longPressRunnable = Runnable {
+        isLongPressTriggered = true
+        lastTapTime = 0L
+        tapHandler.removeCallbacks(singleTapRunnable)
         if (audioRecorder.state.value == RecordingState.RECORDING) {
-            isLongPressTriggered = true
             abortRecording()
+        } else {
+            clearFocusedInput()
         }
     }
     
@@ -312,11 +321,10 @@ class OverlayService : Service() {
                 initialTouchY = event.rawY
                 isDragging = false
                 isLongPressTriggered = false
+                tapHandler.removeCallbacks(singleTapRunnable)
                 
-                // Start long-press timer if recording (for abort)
-                if (audioRecorder.state.value == RecordingState.RECORDING) {
-                    longPressHandler.postDelayed(longPressRunnable, longPressTimeout)
-                }
+                // Start long-press timer for cancel/clear
+                longPressHandler.postDelayed(longPressRunnable, longPressTimeout)
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -327,6 +335,7 @@ class OverlayService : Service() {
                     isDragging = true
                     // Cancel long-press if user starts dragging
                     longPressHandler.removeCallbacks(longPressRunnable)
+                    tapHandler.removeCallbacks(singleTapRunnable)
                 }
 
                 if (isDragging) {
@@ -343,6 +352,7 @@ class OverlayService : Service() {
             MotionEvent.ACTION_UP -> {
                 // Cancel long-press timer
                 longPressHandler.removeCallbacks(longPressRunnable)
+                tapHandler.removeCallbacks(singleTapRunnable)
                 
                 // If long-press was triggered, don't process as tap
                 if (isLongPressTriggered) {
@@ -353,14 +363,15 @@ class OverlayService : Service() {
                 if (!isDragging) {
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastTapTime < doubleTapTimeout) {
-                        // Double-tap detected - clear input
-                        Log.d(TAG, "Double-tap detected, clearing input")
-                        clearFocusedInput()
-                        lastTapTime = 0L // Reset to prevent triple-tap
+                        // Double-tap detected - open IME picker
+                        Log.d(TAG, "Double-tap detected, opening IME picker")
+                        tapHandler.removeCallbacks(singleTapRunnable)
+                        lastTapTime = 0L
+                        openImePicker()
                     } else {
-                        // Single tap - toggle recording
+                        // Single tap - debounce to allow a second tap
                         lastTapTime = currentTime
-                        toggleRecording()
+                        tapHandler.postDelayed(singleTapRunnable, doubleTapTimeout)
                     }
                 }
                 return true
@@ -368,6 +379,7 @@ class OverlayService : Service() {
             MotionEvent.ACTION_CANCEL -> {
                 // Cancel long-press timer on touch cancel
                 longPressHandler.removeCallbacks(longPressRunnable)
+                tapHandler.removeCallbacks(singleTapRunnable)
                 return true
             }
         }
@@ -511,8 +523,38 @@ class OverlayService : Service() {
         if (TextInjectionService.isServiceEnabled()) {
             val cleared = TextInjectionService.clearFocusedInput()
             Log.d(TAG, "Clear input result: $cleared")
+            if (!cleared) {
+                Toast.makeText(this, "No editable field found", Toast.LENGTH_SHORT).show()
+            }
         } else {
             Log.d(TAG, "Accessibility service not enabled, cannot clear input")
+            Toast.makeText(this, "Enable Text Injection to clear input", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openImePicker() {
+        try {
+            val intent = Intent(this, com.voiceink.android.ui.ImePickerActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch IME picker activity", e)
+            Toast.makeText(this, "Unable to open keyboard picker", Toast.LENGTH_SHORT).show()
+        }
+        tapHandler.postDelayed({ ensureOverlayVisible() }, 300L)
+    }
+
+    private fun ensureOverlayVisible() {
+        val view = overlayView ?: return
+        if (view.isAttachedToWindow) return
+        try {
+            windowManager.addView(view, layoutParams)
+            Log.d(TAG, "Overlay re-attached after IME picker")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to re-attach overlay view", e)
         }
     }
 

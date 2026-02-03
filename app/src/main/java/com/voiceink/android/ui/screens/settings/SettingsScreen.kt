@@ -36,16 +36,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.Manifest
+import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,7 +76,6 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.PopupProperties
@@ -102,6 +105,7 @@ fun SettingsScreen(
     }
     var showProModal by remember { mutableStateOf(false) }
     var pendingLargeModelDownload by remember { mutableStateOf<LocalModel?>(null) }
+    var isImeEnabled by remember { mutableStateOf(isVoiceInkImeEnabled(context)) }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -158,6 +162,7 @@ fun SettingsScreen(
                 if (uiState.isOverlayEnabled && hasOverlayPermission) {
                     OverlayService.start(context)
                 }
+                isImeEnabled = isVoiceInkImeEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -292,6 +297,7 @@ fun SettingsScreen(
                             !hasOverlayPermission -> "Tap to grant permission"
                             else -> "Record from any app"
                         },
+                        infoText = "Tap to record/stop. Long-press while recording cancels. Long-press while idle clears the focused input (requires Text Injection). Double-tap opens the keyboard picker.",
                         isChecked = uiState.isOverlayEnabled && hasOverlayPermission,
                         onCheckedChange = { enabled ->
                             if (enabled) {
@@ -350,6 +356,32 @@ fun SettingsScreen(
                         isChecked = uiState.isAutoPunctuationEnabled && isLocalModelSelected && uiState.geminiApiKey.isNotBlank(),
                         enabled = isLocalModelSelected && uiState.geminiApiKey.isNotBlank(),
                         onCheckedChange = { viewModel.setAutoPunctuationEnabled(it) }
+                    )
+                }
+            }
+
+            // Keyboard Access Section
+            item {
+                SectionHeader(title = "Keyboard Access")
+            }
+
+            item {
+                SettingsGroup {
+                    SettingsNavigationRow(
+                        title = "Enable VoiceInk Keyboard",
+                        subtitle = if (isImeEnabled) "Enabled" else "Opens system keyboard settings",
+                        showChevron = !isImeEnabled,
+                        trailing = if (isImeEnabled) {
+                            {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = VoiceInkColors.Success,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        } else null,
+                        onClick = { openInputMethodSettings(context) }
                     )
                 }
             }
@@ -1264,6 +1296,17 @@ private fun InfoTooltip(
             )
         }
     }
+}
+
+private fun isVoiceInkImeEnabled(context: Context): Boolean {
+    val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+    val imeId = ComponentName(context, com.voiceink.android.services.VoiceInkInputMethodService::class.java)
+        .flattenToString()
+    return inputMethodManager.enabledInputMethodList.any { it.id == imeId }
+}
+
+private fun openInputMethodSettings(context: Context) {
+    context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
 }
 
 // ============================================

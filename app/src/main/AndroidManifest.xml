@@ -35,6 +35,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.ImePickerActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:finishOnTaskLaunch="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.VoiceInkAndroid.Transparent" />
+
         <!-- Foreground service for floating overlay recording button -->
         <service
             android:name=".services.OverlayService"

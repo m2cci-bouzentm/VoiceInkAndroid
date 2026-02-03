@@ -275,6 +275,12 @@ Each model now shows **Accuracy** and **Speed** bars in Settings using published
 - Works in **any app** with text input - voice text inserted directly via `currentInputConnection`
 - More reliable than RecognitionService approach (OEM-restricted on Samsung and other devices)
  - **Switching improved:** tapping "Back to keyboard" tries previous IME; if unavailable it opens the IME picker. Long-press always opens the IME picker.
+ - **Overlay shortcut:** double-tap the floating button to open the IME picker. Long-press while idle clears focused input (requires Text Injection).
+ - **Overlay debounce:** single tap waits for a short double-tap window before starting recording; prevents accidental record+picker.
+ - **Overlay resilience:** re-attaches overlay after IME picker opens so it stays visible.
+ - **IME picker fix:** uses a transparent activity to trigger the picker on Samsung where direct calls are ignored.
+ - **Settings help:** "Keyboard Access" section includes a button to enable the VoiceInk keyboard.
+ - **Overlay tooltip:** Floating Button settings row includes a tooltip explaining record/stop, cancel, and clear input gestures.
 
 **Setup:** Settings → System → Languages & Input → On-screen keyboard → Manage keyboards → Enable VoiceInk
 
@@ -906,7 +912,7 @@ Implemented usage tracking infrastructure for monetization. Free tier limits: 60
 - Room database for transcription history (Phase 2)
 
 ---
-*Last updated: February 2, 2026*
+*Last updated: February 3, 2026*
 *Session 1: Initial project setup, build fixes*
 *Session 2: Added Parakeet TDT v3 model, notification recording controls*
 *Session 3: Model download UI, text injection, fixed file name mismatch (Issue 7), implemented sherpa-onnx transcription (Issue 8)*
@@ -922,6 +928,15 @@ Implemented usage tracking infrastructure for monetization. Free tier limits: 60
 *Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
 *Session 14: Upgraded sherpa-onnx to official v1.12.23 AAR for Parakeet support, added real benchmark data*
 *Session 15: Updated benchmark sources (Parakeet Open-ASR), added Gemini 2.0 speed metrics, adjusted speed scoring/display*
+*Session 16: Added Quick Settings tile to open IME picker for fast keyboard switching (later removed)*
+*Session 17: Added Settings help for enabling VoiceInk keyboard and Quick Settings tile instructions (later simplified)*
+*Session 18: Removed tile; added overlay double-tap IME picker and long-press clear input*
+*Session 19: Added overlay tooltip explaining record/stop, cancel, and clear input gestures*
+*Session 20: Debounced overlay taps and re-attached overlay after IME picker opens*
+*Session 21: Added transparent IME picker activity to make double-tap switching reliable on Samsung*
+*Session 21: Added transparent IME picker activity to make double-tap switching reliable on Samsung*
+*Session 20: Debounced overlay taps and re-attached overlay after IME picker opens*
+*Session 19: Added overlay tooltip explaining record/stop, cancel, and clear input gestures*
 
 ## Key Files Modified/Created (Session 13)
 
@@ -1126,7 +1141,7 @@ https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-1.1
 ```
 
 ---
-*Last updated: February 2, 2026*
+*Last updated: February 3, 2026*
 *Session 1: Initial project setup, build fixes*
 *Session 2: Added Parakeet TDT v3 model, notification recording controls*
 *Session 3: Model download UI, text injection, fixed file name mismatch (Issue 7), implemented sherpa-onnx transcription (Issue 8)*
@@ -1142,3 +1157,6 @@ https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-1.1
 *Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
 *Session 14: Upgraded sherpa-onnx to official v1.12.23 AAR for Parakeet support, added real benchmark data, fixed model download URL*
 *Session 15: Updated benchmark sources (Parakeet Open-ASR), added Gemini 2.0 speed metrics, adjusted speed scoring/display*
+*Session 16: Added Quick Settings tile to open IME picker for fast keyboard switching (later removed)*
+*Session 17: Added Settings help for enabling VoiceInk keyboard and Quick Settings tile instructions (later simplified)*
+*Session 18: Removed tile; added overlay double-tap IME picker and long-press clear input*
