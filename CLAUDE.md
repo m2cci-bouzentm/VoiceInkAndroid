@@ -227,7 +227,7 @@ app/src/main/
 Each model now shows **Accuracy** and **Speed** bars in Settings using published benchmarks only.
 
 **Benchmarks + Sources**
-- Whisper Tiny EN: WER 8.437 (LibriSpeech test-clean), 39M params  
+- Whisper Tiny EN: WER 5.6556 (LibriSpeech test-clean), 39M params  
   https://huggingface.co/openai/whisper-tiny.en  
 - Whisper Small: WER 3.432 (LibriSpeech test-clean), 244M params  
   https://huggingface.co/openai/whisper-small  
@@ -236,26 +236,31 @@ Each model now shows **Accuracy** and **Speed** bars in Settings using published
 - Whisper param table (all sizes):  
   https://huggingface.co/openai/whisper  
 - Distil Whisper Large v3: Short-form WER 9.7, 756M params, rel. latency 6.3x  
-  https://huggingface.co/distil-whisper/distil-large-v3  
-- Parakeet TDT 0.6B v3 (Omi benchmark): WER 11.9 (PriMock57 medical), avg 6.0s/file  
+  https://github.com/huggingface/distil-whisper  
+- Parakeet TDT 0.6B v3: Open-ASR leaderboard avg WER 6.34  
+  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3  
+- Parakeet TDT 0.6B v3 speed (Omi benchmark): Avg 6.0s/file (PriMock57 medical)  
   https://omi.health/benchmarking-tts  
 - Gemini 2.5 Flash (Omi benchmark): WER 12.1 (PriMock57 medical), avg 20.0s/file  
   https://omi.health/benchmarking-tts  
 - OpenAI Whisper-1 (Omi benchmark): WER 15.5 (PriMock57 medical), avg 104.0s/file  
   https://omi.health/benchmarking-tts  
+- Gemini 2.0 Flash speed (API throughput/TTFT): 61.7 tok/s, 640ms TTFT  
+  https://llm-benchmarks.com/models/vertex/gemini20flashexp  
 - Parakeet v3 model details (size/languages) + file sizes:  
   https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html  
 
 **Scoring (UI bins, not a claim of precise ranking)**
 - Accuracy uses WER bins (lower is better): `<=2.0 → 5`, `<=3.0 → 4`, `<=4.5 → 3`, `<=7.0 → 2`, else `1`.
-- Speed uses: `RTFx` if available, else `relative latency`, else `paramsM`.
+- Speed uses: `RTFx`, else `avg sec/file`, else `relative latency`, else `tokens/sec`, else `paramsM`.
   - RTFx bins: `>=1000 → 5`, `>=100 → 4`, `>=10 → 3`, `>=1 → 2`, else `1`.
-  - Relative latency bins: `>=6 → 5`, `>=4 → 4`, `>=2 → 3`, `>=1 → 2`, else `1`.
   - Avg sec/file bins: `<=5s → 5`, `<=10s → 4`, `<=20s → 3`, `<=40s → 2`, else `1`.
+  - Relative latency bins: `>=6 → 5`, `>=4 → 4`, `>=2 → 3`, `>=1 → 2`, else `1`.
+  - Tokens/sec bins: `>=200 → 5`, `>=100 → 4`, `>=50 → 3`, `>=20 → 2`, else `1`.
   - Params bins: `<=50M → 5`, `<=250M → 4`, `<=800M → 3`, `<=1200M → 2`, else `1`.
 
 **Cloud models**
-- Gemini 2.0 Flash has no reliable public benchmark in code, so bars show `N/A`.
+- Gemini 2.0 Flash now shows API throughput/TTFT. No public STT WER was found, so accuracy remains `N/A`.
 
 ### Local Model Status
 - Model definitions added to `TranscriptionModel.kt`
@@ -901,7 +906,7 @@ Implemented usage tracking infrastructure for monetization. Free tier limits: 60
 - Room database for transcription history (Phase 2)
 
 ---
-*Last updated: January 15, 2026*
+*Last updated: February 2, 2026*
 *Session 1: Initial project setup, build fixes*
 *Session 2: Added Parakeet TDT v3 model, notification recording controls*
 *Session 3: Model download UI, text injection, fixed file name mismatch (Issue 7), implemented sherpa-onnx transcription (Issue 8)*
@@ -916,6 +921,7 @@ Implemented usage tracking infrastructure for monetization. Free tier limits: 60
 *Session 12: Usage tracking foundation - UsageRepository, SubscriptionRepository stub, limit enforcement in TranscriptionRegistry*
 *Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
 *Session 14: Upgraded sherpa-onnx to official v1.12.23 AAR for Parakeet support, added real benchmark data*
+*Session 15: Updated benchmark sources (Parakeet Open-ASR), added Gemini 2.0 speed metrics, adjusted speed scoring/display*
 
 ## Key Files Modified/Created (Session 13)
 
@@ -1120,7 +1126,7 @@ https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-1.1
 ```
 
 ---
-*Last updated: January 15, 2026*
+*Last updated: February 2, 2026*
 *Session 1: Initial project setup, build fixes*
 *Session 2: Added Parakeet TDT v3 model, notification recording controls*
 *Session 3: Model download UI, text injection, fixed file name mismatch (Issue 7), implemented sherpa-onnx transcription (Issue 8)*
@@ -1135,3 +1141,4 @@ https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-1.1
 *Session 12: Usage tracking foundation - UsageRepository, SubscriptionRepository stub, limit enforcement in TranscriptionRegistry*
 *Session 13: Premium features - Transcription history (Room), Auto-punctuation, Streaming infrastructure, AdManager, Usage display*
 *Session 14: Upgraded sherpa-onnx to official v1.12.23 AAR for Parakeet support, added real benchmark data, fixed model download URL*
+*Session 15: Updated benchmark sources (Parakeet Open-ASR), added Gemini 2.0 speed metrics, adjusted speed scoring/display*

@@ -16,7 +16,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AccessibilityNew
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Memory
@@ -178,7 +178,7 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            Icons.Outlined.ArrowBack,
+                            Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -854,13 +854,23 @@ private fun formatSpeedDetail(benchmark: ModelBenchmark?): String {
         val text = String.format(Locale.US, "%.0f", rtfx)
         return "RTFx $text"
     }
+    benchmark?.avgSecPerFile?.let { seconds ->
+        val text = String.format(Locale.US, "%.1f", seconds)
+        return "Avg ${text}s/file"
+    }
     benchmark?.relativeLatency?.let { rel ->
         val text = String.format(Locale.US, "%.1f", rel)
         return "Rel. latency ${text}x"
     }
-    benchmark?.avgSecPerFile?.let { seconds ->
-        val text = String.format(Locale.US, "%.1f", seconds)
-        return "Avg ${text}s/file"
+    benchmark?.tokensPerSecond?.let { tps ->
+        val tpsText = String.format(Locale.US, "%.1f", tps)
+        val ttft = benchmark.ttftMs
+        return if (ttft != null) {
+            val ttftText = String.format(Locale.US, "%.0f", ttft)
+            "TTFT ${ttftText}ms • ${tpsText} tok/s"
+        } else {
+            "${tpsText} tok/s"
+        }
     }
     benchmark?.paramsM?.let { params ->
         return "Params ${params}M"

@@ -66,22 +66,22 @@ object ModelScoring {
     }
 
     fun speedScore(benchmark: ModelBenchmark?): Int? {
-        benchmark?.tokensPerSecond?.let { tps ->
-            return when {
-                tps >= 200 -> 5
-                tps >= 100 -> 4
-                tps >= 50 -> 3
-                tps >= 20 -> 2
-                else -> 1
-            }
-        }
-
         benchmark?.rtfx?.let { rtfx ->
             return when {
                 rtfx >= 1000 -> 5
                 rtfx >= 100 -> 4
                 rtfx >= 10 -> 3
                 rtfx >= 1 -> 2
+                else -> 1
+            }
+        }
+
+        benchmark?.avgSecPerFile?.let { seconds ->
+            return when {
+                seconds <= 5.0 -> 5
+                seconds <= 10.0 -> 4
+                seconds <= 20.0 -> 3
+                seconds <= 40.0 -> 2
                 else -> 1
             }
         }
@@ -96,12 +96,12 @@ object ModelScoring {
             }
         }
 
-        benchmark?.avgSecPerFile?.let { seconds ->
+        benchmark?.tokensPerSecond?.let { tps ->
             return when {
-                seconds <= 5.0 -> 5
-                seconds <= 10.0 -> 4
-                seconds <= 20.0 -> 3
-                seconds <= 40.0 -> 2
+                tps >= 200 -> 5
+                tps >= 100 -> 4
+                tps >= 50 -> 3
+                tps >= 20 -> 2
                 else -> 1
             }
         }
@@ -160,10 +160,14 @@ data class CloudModel(
  * - Whisper Small WER (LibriSpeech test-clean): https://huggingface.co/openai/whisper-small
  * - Whisper Medium WER (LibriSpeech test-clean): https://huggingface.co/openai/whisper-medium
  * - Whisper params table (all Whisper sizes): https://huggingface.co/openai/whisper
- * - Distil Whisper Large v3 WER (LibriSpeech validation-clean) + params + rel. latency:
- *   https://huggingface.co/distil-whisper/distil-large-v3
- * - Parakeet v3 + cloud models (Gemini 2.5 Flash, OpenAI Whisper-1) medical benchmark:
+ * - Distil Whisper Large v3 WER + params + rel. latency:
+ *   https://github.com/huggingface/distil-whisper
+ * - Parakeet v3 Open-ASR avg WER:
+ *   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+ * - Parakeet v3 + cloud models (Gemini 2.5 Flash, OpenAI Whisper-1) long-form medical benchmark:
  *   https://omi.health/benchmarking-tts
+ * - Gemini 2.0 Flash API throughput/TTFT:
+ *   https://llm-benchmarks.com/models/vertex/gemini20flashexp
  * - Parakeet v3 model details (size/languages) + file sizes:
  *   https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html
  *
@@ -174,14 +178,14 @@ object PredefinedModels {
     // ==================== LOCAL MODELS (On-Device, Private) ====================
     
     // Whisper Tiny - Fastest, English only
-    // Benchmark: WER 8.437% LibriSpeech test-clean (HuggingFace)
+    // Benchmark: WER 5.6556% LibriSpeech test-clean (HuggingFace)
     val whisperTinyEn = LocalModel(
         id = "whisper-tiny-en",
         name = "Whisper Tiny",
         description = "English only, 39M params",
         badge = ModelBadge.FASTEST,
         benchmark = ModelBenchmark(
-            wer = 8.437,
+            wer = 5.6556,
             werDataset = "LibriSpeech test-clean",
             paramsM = 39
         ),
@@ -192,7 +196,8 @@ object PredefinedModels {
     )
     
     // Parakeet TDT 0.6B v3 - 25 European languages
-    // Benchmarks: Omi Voice LLM Benchmark (PriMock57 medical set)
+    // Accuracy: Open-ASR leaderboard avg (HuggingFace model card)
+    // Speed: Omi Voice LLM Benchmark (PriMock57 medical set)
     // Model details + file sizes from sherpa-onnx docs
     val parakeetTdt = LocalModel(
         id = "parakeet-tdt-0.6b",
@@ -200,8 +205,8 @@ object PredefinedModels {
         description = "NVIDIA, 25 languages",
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
-            wer = 11.9,
-            werDataset = "PriMock57 (medical)",
+            wer = 6.34,
+            werDataset = "Open-ASR Leaderboard avg",
             paramsM = 600,
             avgSecPerFile = 6.0
         ),
@@ -306,49 +311,36 @@ object PredefinedModels {
         name = "Gemini 2.0 Flash",
         description = "Google AI, stable version",
         badge = ModelBadge.NONE,
+        benchmark = ModelBenchmark(
+            tokensPerSecond = 61.7,
+            ttftMs = 640.0
+        ),
         provider = ModelProvider.GEMINI,
         modelIdentifier = "gemini-2.0-flash"
     )
 
     // ==================== MODEL LISTS ====================
-    
-    // Main models shown to users (curated, clear choices)
-    val featuredModels: List<TranscriptionModel> = listOf(
-        // Local - ordered by size/use case
-        whisperTinyEn,          // Fastest, English
-        parakeetTdt,            // Best for English (NVIDIA)
-        whisperSmall,           // Multilingual, smaller
-        distilWhisperLargeV3,   // Recommended, multilingual
-        whisperMedium,          // Most accurate, multilingual
-        // Cloud
-        gemini25Flash,          // Latest Gemini
-        gemini20Flash,          // Stable Gemini
-        openaiWhisper           // Accurate cloud
-    )
-    
-    // All models
-    val allModels: List<TranscriptionModel> = listOf(
-        whisperTinyEn,
-        parakeetTdt,
-        whisperSmall,
-        distilWhisperLargeV3,
-        whisperMedium,
-        gemini25Flash,
-        gemini20Flash,
-        openaiWhisper
-    )
-
-    val cloudModels: List<CloudModel> = listOf(
-        gemini25Flash,
-        openaiWhisper,
-        gemini20Flash
-    )
-
-    val localModels: List<LocalModel> = listOf(
+    private val localModelList: List<LocalModel> = listOf(
         whisperTinyEn,
         parakeetTdt,
         whisperSmall,
         distilWhisperLargeV3,
         whisperMedium
     )
+
+    private val cloudModelList: List<CloudModel> = listOf(
+        gemini25Flash,
+        gemini20Flash,
+        openaiWhisper
+    )
+
+    // Main models shown to users (curated, clear choices)
+    val featuredModels: List<TranscriptionModel> = localModelList + cloudModelList
+
+    // All models
+    val allModels: List<TranscriptionModel> = featuredModels
+
+    val cloudModels: List<CloudModel> = cloudModelList
+
+    val localModels: List<LocalModel> = localModelList
 }
