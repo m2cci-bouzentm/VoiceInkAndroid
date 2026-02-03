@@ -297,7 +297,7 @@ fun SettingsScreen(
                             !hasOverlayPermission -> "Tap to grant permission"
                             else -> "Record from any app"
                         },
-                        infoText = "Tap to record/stop. Long-press while recording cancels. Long-press while idle clears the focused input (requires Text Injection). Double-tap opens the keyboard picker.",
+                        infoText = "Tap to record/stop. Long-press while recording cancels. Long-press while idle clears the focused input (requires Text Injection).",
                         isChecked = uiState.isOverlayEnabled && hasOverlayPermission,
                         onCheckedChange = { enabled ->
                             if (enabled) {
