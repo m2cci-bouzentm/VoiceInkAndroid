@@ -11,6 +11,9 @@ local.properties
 /app/build
 *.apk
 *.aab
+keystore.properties
+*.keystore
+*.jks
 
 # Android SDK (should not be in repo)
 /build-tools/
