@@ -104,6 +104,45 @@ class TranscriptOutputRouter @Inject constructor(
         }
     }
 
+    /**
+     * Fire the abort script: cut any speech and interrupt the running turn.
+     *
+     * Only meaningful for the Termux destination. The script lives beside the
+     * delivery script rather than behind its own setting — one path to configure
+     * instead of two, at the cost of expecting them in the same folder.
+     *
+     * Returns false when the destination is not Termux, so the caller can fall
+     * back to whatever it did before.
+     */
+    suspend fun abort(): Boolean {
+        if (settingsRepository.transcriptDestination.first() != TranscriptDestination.TERMUX_SCRIPT) {
+            return false
+        }
+        val sendScript = settingsRepository.termuxScriptPath.first().trim()
+        if (sendScript.isBlank()) return false
+
+        val abortScript = sendScript.substringBeforeLast('/', "") + "/$ABORT_SCRIPT_NAME"
+        return try {
+            val intent = Intent().apply {
+                setClassName(TERMUX_PACKAGE, TERMUX_SERVICE)
+                action = TERMUX_RUN_COMMAND
+                putExtra("com.termux.RUN_COMMAND_PATH", abortScript)
+                putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+                putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+            Log.d(TAG, "abort sent: $abortScript")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "abort failed", e)
+            false
+        }
+    }
+
     private suspend fun httpPost(text: String): DeliveryResult = withContext(Dispatchers.IO) {
         val url = settingsRepository.transcriptPostUrl.first().trim()
         if (url.isBlank()) return@withContext DeliveryResult(false, "no URL configured")
@@ -147,5 +186,8 @@ class TranscriptOutputRouter @Inject constructor(
 
         const val DEFAULT_SCRIPT_PATH =
             "/data/data/com.termux/files/home/voice-agent-loop/android/scripts/voice-send.sh"
+
+        /** Expected alongside the delivery script. See [abort]. */
+        private const val ABORT_SCRIPT_NAME = "voice-stop.sh"
     }
 }

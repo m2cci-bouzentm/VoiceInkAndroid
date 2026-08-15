@@ -768,7 +768,9 @@ private fun OverlayGuideDialog(onDismiss: () -> Unit) {
                 )
                 GuideRow(
                     "Long-press when idle",
-                    "Clear the focused text field. Needs Text Injection enabled."
+                    "On the Termux destination: cut the agent's speech and " +
+                        "interrupt what it is doing. Otherwise: clear the focused " +
+                        "text field, which needs Text Injection enabled."
                 )
                 GuideRow("Drag", "Move the button anywhere on screen.")
 

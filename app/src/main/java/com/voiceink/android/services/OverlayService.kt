@@ -149,7 +149,7 @@ class OverlayService : Service() {
         if (audioRecorder.state.value == RecordingState.RECORDING) {
             abortRecording()
         } else {
-            clearFocusedInput()
+            abortAgentOrClearInput()
         }
     }
     
@@ -508,6 +508,25 @@ class OverlayService : Service() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("VoiceInk Transcription", text)
         clipboard.setPrimaryClip(clip)
+    }
+
+    /**
+     * Long-press while idle.
+     *
+     * On the Termux destination this is the panic gesture: cut the agent's
+     * speech and interrupt whatever it is doing. Clearing a focused text field
+     * would be meaningless there — the text went to a terminal, not to a field
+     * on screen. Every other destination keeps the original behaviour.
+     */
+    private fun abortAgentOrClearInput() {
+        serviceScope.launch {
+            if (transcriptOutputRouter.abort()) {
+                vibrateDevice()
+                Toast.makeText(this@OverlayService, "Agent interrupted", Toast.LENGTH_SHORT).show()
+            } else {
+                clearFocusedInput()
+            }
+        }
     }
 
     private fun clearFocusedInput() {
