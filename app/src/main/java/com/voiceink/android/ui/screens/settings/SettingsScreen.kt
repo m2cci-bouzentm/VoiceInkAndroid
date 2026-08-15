@@ -44,16 +44,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.Manifest
 import android.content.Context
-import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
-import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.voiceink.android.data.model.DownloadState
+import com.voiceink.android.domain.output.TranscriptDestination
+import com.voiceink.android.domain.output.TranscriptOutputRouter
 import com.voiceink.android.domain.model.CloudModel
 import com.voiceink.android.domain.model.Language
 import com.voiceink.android.domain.model.LocalModel
@@ -105,7 +105,6 @@ fun SettingsScreen(
     }
     var showProModal by remember { mutableStateOf(false) }
     var pendingLargeModelDownload by remember { mutableStateOf<LocalModel?>(null) }
-    var isImeEnabled by remember { mutableStateOf(isVoiceInkImeEnabled(context)) }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -162,7 +161,6 @@ fun SettingsScreen(
                 if (uiState.isOverlayEnabled && hasOverlayPermission) {
                     OverlayService.start(context)
                 }
-                isImeEnabled = isVoiceInkImeEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -360,29 +358,61 @@ fun SettingsScreen(
                 }
             }
 
-            // Keyboard Access Section
+            // Transcript Destination Section
             item {
-                SectionHeader(title = "Keyboard Access")
+                SectionHeader(title = "Transcript Destination")
             }
 
             item {
                 SettingsGroup {
-                    SettingsNavigationRow(
-                        title = "Enable VoiceInk Keyboard",
-                        subtitle = if (isImeEnabled) "Enabled" else "Opens system keyboard settings",
-                        showChevron = !isImeEnabled,
-                        trailing = if (isImeEnabled) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = VoiceInkColors.Success,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        } else null,
-                        onClick = { openInputMethodSettings(context) }
+                    TranscriptDestinationSelector(
+                        selected = uiState.transcriptDestination,
+                        onSelect = { viewModel.setTranscriptDestination(it) }
                     )
+
+                    when (uiState.transcriptDestination) {
+                        TranscriptDestination.TERMUX_SCRIPT -> {
+                            SettingsDivider()
+                            Spacer(modifier = Modifier.height(12.dp))
+                            PlainTextField(
+                                label = "Script path",
+                                value = uiState.termuxScriptPath,
+                                onValueChange = { viewModel.setTermuxScriptPath(it) },
+                                placeholder = TranscriptOutputRouter.DEFAULT_SCRIPT_PATH
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "The transcript is passed as the first argument. " +
+                                    "Requires the F-Droid build of Termux — the Play Store " +
+                                    "build has no RUN_COMMAND service. In Termux, run " +
+                                    "'termux-setup-storage' once and allow external apps in " +
+                                    "~/.termux/termux.properties.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = VoiceInkColors.TextMuted,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                        TranscriptDestination.HTTP_POST -> {
+                            SettingsDivider()
+                            Spacer(modifier = Modifier.height(12.dp))
+                            PlainTextField(
+                                label = "URL",
+                                value = uiState.transcriptPostUrl,
+                                onValueChange = { viewModel.setTranscriptPostUrl(it) },
+                                placeholder = "http://127.0.0.1:8765/transcript"
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Sent as a plain-text POST body.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = VoiceInkColors.TextMuted,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                        TranscriptDestination.TEXT_INJECTION -> Unit
+                    }
                 }
             }
 
@@ -1057,6 +1087,81 @@ private fun MiniUsageBar(
 // API KEY FIELD (Simplified)
 // ============================================
 
+/**
+ * Where finished transcripts go. The Termux option is the Android equivalent of
+ * Handy's `external_script`: hand the text to a script instead of typing it into
+ * whatever happens to be focused.
+ */
+@Composable
+private fun TranscriptDestinationSelector(
+    selected: TranscriptDestination,
+    onSelect: (TranscriptDestination) -> Unit
+) {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        TranscriptDestination.entries.forEach { destination ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(destination) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = destination == selected,
+                    onClick = { onSelect(destination) },
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = VoiceInkColors.Primary,
+                        unselectedColor = VoiceInkColors.TextMuted
+                    )
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = destination.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = VoiceInkColors.TextPrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlainTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
+) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = VoiceInkColors.TextMuted
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = {
+                Text(placeholder, color = VoiceInkColors.TextMuted, style = MaterialTheme.typography.bodySmall)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = VoiceInkColors.Primary,
+                unfocusedBorderColor = VoiceInkColors.GlassBorder,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                cursorColor = VoiceInkColors.Primary,
+                focusedTextColor = VoiceInkColors.TextPrimary,
+                unfocusedTextColor = VoiceInkColors.TextPrimary
+            ),
+            shape = RoundedCornerShape(10.dp)
+        )
+    }
+}
+
 @Composable
 private fun ApiKeyField(
     label: String,
@@ -1296,17 +1401,6 @@ private fun InfoTooltip(
             )
         }
     }
-}
-
-private fun isVoiceInkImeEnabled(context: Context): Boolean {
-    val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-    val imeId = ComponentName(context, com.voiceink.android.services.VoiceInkInputMethodService::class.java)
-        .flattenToString()
-    return inputMethodManager.enabledInputMethodList.any { it.id == imeId }
-}
-
-private fun openInputMethodSettings(context: Context) {
-    context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
 }
 
 // ============================================

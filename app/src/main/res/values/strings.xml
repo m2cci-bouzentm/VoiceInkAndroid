@@ -6,7 +6,6 @@
     <string name="stop_recording">Stop recording</string>
     <string name="overlay_notification_title">VoiceInk Recording</string>
     <string name="overlay_notification_text">Tap the floating button to record</string>
-    <string name="ime_subtype_voice">Voice Input</string>
     <string name="recording_cancelled">Recording cancelled</string>
     <string name="cancel">Cancel</string>
     <string name="long_press_to_cancel">Long-press to cancel</string>
