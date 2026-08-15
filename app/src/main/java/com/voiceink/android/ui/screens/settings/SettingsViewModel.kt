@@ -91,8 +91,29 @@ class SettingsViewModel @Inject constructor(
                     usageStats = usageStats,
                     subscriptionTier = subscriptionTier
                 )
-            }.collect { state ->
-                _uiState.value = state
+            }.collect { fresh ->
+                // Copy field by field rather than `_uiState.value = fresh`.
+                // A whole-state replacement resets everything this combine does
+                // not know about — the transcript destination, script path, POST
+                // URL and OpenRouter settings are owned by the collectors below,
+                // and would silently snap back to their defaults on any emission
+                // here. That reverted the destination to "type into focused app"
+                // whenever an unrelated flow ticked.
+                _uiState.update { current ->
+                    current.copy(
+                        selectedModelId = fresh.selectedModelId,
+                        selectedLanguage = fresh.selectedLanguage,
+                        geminiApiKey = fresh.geminiApiKey,
+                        openaiApiKey = fresh.openaiApiKey,
+                        downloadStates = fresh.downloadStates,
+                        downloadedModels = fresh.downloadedModels,
+                        isAccessibilityEnabled = fresh.isAccessibilityEnabled,
+                        isOverlayEnabled = fresh.isOverlayEnabled,
+                        isAutoPunctuationEnabled = fresh.isAutoPunctuationEnabled,
+                        usageStats = fresh.usageStats,
+                        subscriptionTier = fresh.subscriptionTier
+                    )
+                }
             }
         }
 
