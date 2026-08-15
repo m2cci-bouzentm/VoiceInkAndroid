@@ -84,6 +84,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private const val TERMUX_RUN_COMMAND_PERMISSION = "com.termux.permission.RUN_COMMAND"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -105,6 +107,28 @@ fun SettingsScreen(
     }
     var showProModal by remember { mutableStateOf(false) }
     var pendingLargeModelDownload by remember { mutableStateOf<LocalModel?>(null) }
+
+    var hasRunCommandPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                TERMUX_RUN_COMMAND_PERMISSION
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val runCommandPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasRunCommandPermission = granted
+        if (!granted) {
+            Toast.makeText(
+                context,
+                "Termux permission denied — transcripts will fall back to the clipboard",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -369,7 +393,14 @@ fun SettingsScreen(
                 SettingsGroup {
                     TranscriptDestinationSelector(
                         selected = uiState.transcriptDestination,
-                        onSelect = { viewModel.setTranscriptDestination(it) }
+                        onSelect = { destination ->
+                            viewModel.setTranscriptDestination(destination)
+                            if (destination == TranscriptDestination.TERMUX_SCRIPT &&
+                                !hasRunCommandPermission
+                            ) {
+                                runCommandPermissionLauncher.launch(TERMUX_RUN_COMMAND_PERMISSION)
+                            }
+                        }
                     )
 
                     when (uiState.transcriptDestination) {
@@ -382,6 +413,17 @@ fun SettingsScreen(
                                 onValueChange = { viewModel.setTermuxScriptPath(it) },
                                 placeholder = TranscriptOutputRouter.DEFAULT_SCRIPT_PATH
                             )
+                            if (!hasRunCommandPermission) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "Termux permission not granted — transcripts will " +
+                                        "fall back to the clipboard. Tap \"Run Termux script\" " +
+                                        "again to be asked.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = VoiceInkColors.Warning,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = "The transcript is passed as the first argument. " +
