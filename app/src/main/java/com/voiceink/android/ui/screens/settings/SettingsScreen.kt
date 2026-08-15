@@ -226,6 +226,8 @@ fun SettingsScreen(
                 val hasRequiredApiKey = when {
                     model is CloudModel && model.provider == ModelProvider.GEMINI -> uiState.geminiApiKey.isNotBlank()
                     model is CloudModel && model.provider == ModelProvider.OPENAI -> uiState.openaiApiKey.isNotBlank()
+                    model is CloudModel && model.provider == ModelProvider.OPENROUTER ->
+                        uiState.openRouterApiKey.isNotBlank() && uiState.openRouterModelId.isNotBlank()
                     else -> true
                 }
                 val canUseCloudModel = hasRequiredApiKey
@@ -439,6 +441,34 @@ fun SettingsScreen(
                         onValueChange = viewModel::setOpenaiApiKey,
                         placeholder = "Enter API key"
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    ApiKeyField(
+                        label = "OpenRouter",
+                        value = uiState.openRouterApiKey,
+                        onValueChange = viewModel::setOpenRouterApiKey,
+                        placeholder = "Enter API key"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Typed, not picked: OpenRouter fronts hundreds of models and
+                    // the list changes constantly, so any bundled dropdown would
+                    // be stale and mostly irrelevant to a given user.
+                    PlainTextField(
+                        label = "OpenRouter model",
+                        value = uiState.openRouterModelId,
+                        onValueChange = viewModel::setOpenRouterModelId,
+                        placeholder = "google/gemini-2.5-flash"
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Must accept audio input. Browse at openrouter.ai/models",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = VoiceInkColors.TextMuted,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -446,7 +476,7 @@ fun SettingsScreen(
             // Get API Keys hint
             item {
                 Text(
-                    text = "Get keys: aistudio.google.com • platform.openai.com",
+                    text = "Get keys: aistudio.google.com • platform.openai.com • openrouter.ai/keys",
                     style = MaterialTheme.typography.bodySmall,
                     color = VoiceInkColors.TextMuted,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
@@ -650,6 +680,7 @@ private fun ModelItem(
                             ModelProvider.LOCAL -> VoiceInkColors.Secondary.copy(alpha = 0.15f)
                             ModelProvider.GEMINI -> Color(0xFF4285F4).copy(alpha = 0.15f)
                             ModelProvider.OPENAI -> Color(0xFF10A37F).copy(alpha = 0.15f)
+                            ModelProvider.OPENROUTER -> Color(0xFF8B5CF6).copy(alpha = 0.15f)
                         },
                         shape = RoundedCornerShape(10.dp)
                     ),
@@ -662,6 +693,7 @@ private fun ModelItem(
                         ModelProvider.LOCAL -> VoiceInkColors.Secondary
                         ModelProvider.GEMINI -> Color(0xFF4285F4)
                         ModelProvider.OPENAI -> Color(0xFF10A37F)
+                        ModelProvider.OPENROUTER -> Color(0xFF8B5CF6)
                     },
                     modifier = Modifier.size(20.dp)
                 )

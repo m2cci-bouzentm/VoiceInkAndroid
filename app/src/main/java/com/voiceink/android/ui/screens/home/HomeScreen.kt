@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.voiceink.android.data.audio.RecordingState
 import com.voiceink.android.ui.components.AudioLevelIndicator
@@ -57,6 +59,11 @@ fun HomeScreen(
     val audioAmplitude by viewModel.audioAmplitude.collectAsState()
 
     var showOverlayHint by remember { mutableStateOf(true) }
+    var showGuide by remember { mutableStateOf(false) }
+
+    if (showGuide) {
+        OverlayGuideDialog(onDismiss = { showGuide = false })
+    }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -86,6 +93,7 @@ fun HomeScreen(
         ) {
             // Premium Top Bar
             PremiumTopBar(
+                onGuideClick = { showGuide = true },
                 onHistoryClick = onNavigateToHistory,
                 onSettingsClick = onNavigateToSettings
             )
@@ -180,6 +188,7 @@ fun HomeScreen(
 
 @Composable
 private fun PremiumTopBar(
+    onGuideClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
@@ -205,6 +214,24 @@ private fun PremiumTopBar(
         }
 
         Row {
+            IconButton(
+                onClick = onGuideClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = VoiceInkColors.SurfaceLight,
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    Icons.Outlined.HelpOutline,
+                    contentDescription = "How to use",
+                    tint = VoiceInkColors.TextSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
             IconButton(
                 onClick = onHistoryClick,
                 modifier = Modifier
@@ -694,5 +721,101 @@ private fun PremiumRecordButton(
                 )
             }
         }
+    }
+}
+
+/**
+ * How the floating overlay button behaves.
+ *
+ * The gestures are not discoverable — long-press does two different things
+ * depending on whether a recording is in progress — so they are spelled out
+ * here rather than left to be found by accident.
+ */
+@Composable
+private fun OverlayGuideDialog(onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = VoiceInkColors.Surface,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Using the floating button",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = VoiceInkColors.TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Works from any app once enabled in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = VoiceInkColors.TextMuted
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                GuideRow("Tap", "Start recording. The button turns red.")
+                GuideRow("Tap again", "Stop and transcribe.")
+                GuideRow(
+                    "Long-press while recording",
+                    "Abort. The audio is discarded and nothing is transcribed. " +
+                        "You get a short vibration."
+                )
+                GuideRow(
+                    "Long-press when idle",
+                    "Clear the focused text field. Needs Text Injection enabled."
+                )
+                GuideRow("Drag", "Move the button anywhere on screen.")
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Where the text goes is set by Transcript Destination " +
+                        "in Settings: typed into the focused app, handed to a " +
+                        "Termux script, or POSTed to a URL. If delivery fails it " +
+                        "falls back to the clipboard.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = VoiceInkColors.TextMuted
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Got it", color = VoiceInkColors.Primary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuideRow(gesture: String, meaning: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+    ) {
+        Text(
+            text = gesture,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = VoiceInkColors.TextPrimary,
+            modifier = Modifier.width(120.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = meaning,
+            style = MaterialTheme.typography.bodySmall,
+            color = VoiceInkColors.TextSecondary,
+            modifier = Modifier.weight(1f)
+        )
     }
 }

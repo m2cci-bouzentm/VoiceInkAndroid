@@ -4,9 +4,10 @@ package com.voiceink.android.domain.model
  * Represents a transcription model provider
  */
 enum class ModelProvider {
-    LOCAL,      // Sherpa-ONNX local models
-    GEMINI,     // Google Gemini API
-    OPENAI      // OpenAI Whisper API
+    LOCAL,       // Sherpa-ONNX local models
+    GEMINI,      // Google Gemini API
+    OPENAI,      // OpenAI Whisper API
+    OPENROUTER   // OpenRouter — any audio-capable model, named by the user
 }
 
 /**
@@ -319,6 +320,22 @@ object PredefinedModels {
         modelIdentifier = "gemini-2.0-flash"
     )
 
+    /**
+     * OpenRouter routes to hundreds of models and the catalogue moves weekly, so
+     * shipping a hardcoded list would be stale immediately and mostly noise. The
+     * user types the model slug themselves; `modelIdentifier` is only a
+     * placeholder, and the real value is read from settings at call time.
+     */
+    val openRouterCustom = CloudModel(
+        id = "openrouter-custom",
+        name = "OpenRouter",
+        description = "Any audio-capable model — you name it",
+        badge = ModelBadge.NONE,
+        benchmark = null,
+        provider = ModelProvider.OPENROUTER,
+        modelIdentifier = ""
+    )
+
     // ==================== MODEL LISTS ====================
     private val localModelList: List<LocalModel> = listOf(
         whisperTinyEn,
@@ -331,7 +348,8 @@ object PredefinedModels {
     private val cloudModelList: List<CloudModel> = listOf(
         gemini25Flash,
         gemini20Flash,
-        openaiWhisper
+        openaiWhisper,
+        openRouterCustom
     )
 
     // Main models shown to users (curated, clear choices)

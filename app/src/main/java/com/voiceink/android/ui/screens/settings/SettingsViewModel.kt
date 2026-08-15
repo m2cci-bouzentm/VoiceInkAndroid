@@ -25,6 +25,8 @@ data class SettingsUiState(
     val selectedLanguage: String = "auto",
     val geminiApiKey: String = "",
     val openaiApiKey: String = "",
+    val openRouterApiKey: String = "",
+    val openRouterModelId: String = "",
     val downloadStates: Map<String, DownloadState> = emptyMap(),
     val downloadedModels: Set<String> = emptySet(),
     val isAccessibilityEnabled: Boolean = false,
@@ -113,6 +115,18 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+
+        viewModelScope.launch {
+            combine(
+                settingsRepository.openRouterApiKey,
+                settingsRepository.openRouterModelId
+            ) { key, modelId -> key to modelId }
+                .collect { (key, modelId) ->
+                    _uiState.update {
+                        it.copy(openRouterApiKey = key, openRouterModelId = modelId)
+                    }
+                }
+        }
     }
 
     private fun getDownloadedModels(): Set<String> {
@@ -137,6 +151,20 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(isAutoPunctuationEnabled = enabled) }
         viewModelScope.launch {
             settingsRepository.setAutoPunctuationEnabled(enabled)
+        }
+    }
+
+    fun setOpenRouterApiKey(key: String) {
+        _uiState.update { it.copy(openRouterApiKey = key) }
+        viewModelScope.launch {
+            settingsRepository.setOpenRouterApiKey(key)
+        }
+    }
+
+    fun setOpenRouterModelId(modelId: String) {
+        _uiState.update { it.copy(openRouterModelId = modelId) }
+        viewModelScope.launch {
+            settingsRepository.setOpenRouterModelId(modelId)
         }
     }
 

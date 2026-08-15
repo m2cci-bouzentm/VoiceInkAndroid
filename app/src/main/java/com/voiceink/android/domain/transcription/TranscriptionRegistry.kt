@@ -17,6 +17,7 @@ class TranscriptionRegistry @Inject constructor(
     private val localService: LocalTranscriptionService,
     private val geminiService: GeminiTranscriptionService,
     private val openaiService: OpenAITranscriptionService,
+    private val openRouterService: OpenRouterTranscriptionService,
     private val usageRepository: UsageRepository,
     private val subscriptionRepository: SubscriptionRepository
 ) : TranscriptionService {
@@ -45,6 +46,7 @@ class TranscriptionRegistry @Inject constructor(
             ModelProvider.LOCAL -> localService
             ModelProvider.GEMINI -> geminiService
             ModelProvider.OPENAI -> openaiService
+            ModelProvider.OPENROUTER -> openRouterService
         }
 
         // Perform transcription with language setting

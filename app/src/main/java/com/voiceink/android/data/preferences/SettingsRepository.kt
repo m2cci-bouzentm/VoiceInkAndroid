@@ -31,6 +31,8 @@ class SettingsRepository @Inject constructor(
         val OVERLAY_ENABLED = booleanPreferencesKey("overlay_enabled")
         val AUTO_PUNCTUATION_ENABLED = booleanPreferencesKey("auto_punctuation_enabled")
         val SELECTED_LANGUAGE = stringPreferencesKey("selected_language")
+        val OPENROUTER_API_KEY = stringPreferencesKey("openrouter_api_key")
+        val OPENROUTER_MODEL_ID = stringPreferencesKey("openrouter_model_id")
         val TRANSCRIPT_DESTINATION = stringPreferencesKey("transcript_destination")
         val TERMUX_SCRIPT_PATH = stringPreferencesKey("termux_script_path")
         val TRANSCRIPT_POST_URL = stringPreferencesKey("transcript_post_url")
@@ -98,6 +100,28 @@ class SettingsRepository @Inject constructor(
     suspend fun setSelectedLanguage(languageCode: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.SELECTED_LANGUAGE] = languageCode
+        }
+    }
+
+    val openRouterApiKey: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.OPENROUTER_API_KEY] ?: ""
+    }
+
+    suspend fun setOpenRouterApiKey(key: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.OPENROUTER_API_KEY] = key
+        }
+    }
+
+    // Typed by the user: OpenRouter's catalogue is too large and too fast-moving
+    // to enumerate, e.g. "google/gemini-2.5-flash".
+    val openRouterModelId: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.OPENROUTER_MODEL_ID] ?: ""
+    }
+
+    suspend fun setOpenRouterModelId(modelId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.OPENROUTER_MODEL_ID] = modelId
         }
     }
 
