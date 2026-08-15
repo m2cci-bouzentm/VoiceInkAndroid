@@ -44,12 +44,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.Manifest
 import android.content.Context
-import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
-import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -107,7 +105,6 @@ fun SettingsScreen(
     }
     var showProModal by remember { mutableStateOf(false) }
     var pendingLargeModelDownload by remember { mutableStateOf<LocalModel?>(null) }
-    var isImeEnabled by remember { mutableStateOf(isVoiceInkImeEnabled(context)) }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -164,7 +161,6 @@ fun SettingsScreen(
                 if (uiState.isOverlayEnabled && hasOverlayPermission) {
                     OverlayService.start(context)
                 }
-                isImeEnabled = isVoiceInkImeEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -417,32 +413,6 @@ fun SettingsScreen(
                         }
                         TranscriptDestination.TEXT_INJECTION -> Unit
                     }
-                }
-            }
-
-            // Keyboard Access Section
-            item {
-                SectionHeader(title = "Keyboard Access")
-            }
-
-            item {
-                SettingsGroup {
-                    SettingsNavigationRow(
-                        title = "Enable VoiceInk Keyboard",
-                        subtitle = if (isImeEnabled) "Enabled" else "Opens system keyboard settings",
-                        showChevron = !isImeEnabled,
-                        trailing = if (isImeEnabled) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = VoiceInkColors.Success,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        } else null,
-                        onClick = { openInputMethodSettings(context) }
-                    )
                 }
             }
 
@@ -1431,17 +1401,6 @@ private fun InfoTooltip(
             )
         }
     }
-}
-
-private fun isVoiceInkImeEnabled(context: Context): Boolean {
-    val inputMethodManager = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-    val imeId = ComponentName(context, com.voiceink.android.services.VoiceInkInputMethodService::class.java)
-        .flattenToString()
-    return inputMethodManager.enabledInputMethodList.any { it.id == imeId }
-}
-
-private fun openInputMethodSettings(context: Context) {
-    context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
 }
 
 // ============================================

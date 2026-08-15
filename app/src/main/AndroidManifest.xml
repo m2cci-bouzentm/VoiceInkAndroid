@@ -56,19 +56,6 @@
             android:foregroundServiceType="microphone"
             android:exported="false" />
 
-        <!-- VoiceInk Input Method (Voice-only keyboard) -->
-        <service
-            android:name=".services.VoiceInkInputMethodService"
-            android:permission="android.permission.BIND_INPUT_METHOD"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.view.InputMethod" />
-            </intent-filter>
-            <meta-data
-                android:name="android.view.im"
-                android:resource="@xml/input_method" />
-        </service>
-
     </application>
 
 </manifest>

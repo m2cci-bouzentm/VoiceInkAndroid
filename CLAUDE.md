@@ -1160,3 +1160,19 @@ https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-1.1
 *Session 20: Debounced overlay taps and re-attached overlay after IME picker opens (later removed)*
 *Session 21: Added transparent IME picker activity to make double-tap switching reliable on Samsung (later removed)*
 *Session 22: Removed overlay IME picker path and activity after instability*
+
+## Session 23: Removed the voice keyboard (IME)
+
+The `VoiceInkInputMethodService` IME was deleted. It was unused — the floating
+overlay covers the same need without asking the user to switch keyboards, and
+the IME had accumulated its own bug tail (Sessions 16-22 are almost entirely
+IME switching workarounds that were later reverted).
+
+Deleted: `services/VoiceInkInputMethodService.kt`, `res/xml/input_method.xml`,
+`res/layout/keyboard_view.xml`, `res/drawable/ime_background.xml`,
+`res/drawable/ime_switch_button_bg.xml`, the `ime_subtype_voice` string, the
+manifest `<service>` entry, and the "Keyboard Access" settings section with its
+`isVoiceInkImeEnabled` / `openInputMethodSettings` helpers.
+
+Sections above that describe the IME are kept as historical record; the feature
+no longer exists.
