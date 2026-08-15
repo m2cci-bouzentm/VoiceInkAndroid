@@ -76,6 +76,8 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.PopupProperties
@@ -543,8 +545,8 @@ private fun SectionHeader(title: String) {
         modifier = Modifier.padding(
             start = 20.dp,
             end = 20.dp,
-            top = 24.dp,
-            bottom = 8.dp
+            top = 16.dp,
+            bottom = 6.dp
         )
     )
 }
@@ -597,7 +599,7 @@ private fun SettingsToggleRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled) { onCheckedChange(!isChecked) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -646,7 +648,7 @@ private fun SettingsNavigationRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -694,11 +696,13 @@ private fun ModelItem(
     val isLocalModel = model is LocalModel
     val isDownloading = downloadState is DownloadState.Downloading || downloadState is DownloadState.Extracting
     val canSelect = isEnabled && (!isLocalModel || isDownloaded)
+    var showBenchmarks by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 3.dp)
+            .animateContentSize(),
         shape = RoundedCornerShape(12.dp),
         color = when {
             isSelected -> VoiceInkColors.Primary.copy(alpha = 0.1f)
@@ -710,13 +714,13 @@ private fun ModelItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Provider icon
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(32.dp)
                     .background(
                         color = when (model.provider) {
                             ModelProvider.LOCAL -> VoiceInkColors.Secondary.copy(alpha = 0.15f)
@@ -737,11 +741,11 @@ private fun ModelItem(
                         ModelProvider.OPENAI -> Color(0xFF10A37F)
                         ModelProvider.OPENROUTER -> Color(0xFF8B5CF6)
                     },
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             // Model info
             Column(modifier = Modifier.weight(1f)) {
@@ -764,7 +768,10 @@ private fun ModelItem(
                 }
                 
                 Text(
-                    text = model.description,
+                    text = listOfNotNull(
+                        model.description,
+                        compactScoreSummary(model.benchmark)
+                    ).joinToString("  ·  "),
                     style = MaterialTheme.typography.bodySmall,
                     color = VoiceInkColors.TextMuted,
                     maxLines = 1,
@@ -779,23 +786,25 @@ private fun ModelItem(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                if (showBenchmarks) {
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                ModelMetricRow(
-                    label = "Accuracy",
-                    score = ModelScoring.accuracyScore(model.benchmark),
-                    detail = formatAccuracyDetail(model.benchmark),
-                    barColor = Color(0xFFFFB800)
-                )
+                    ModelMetricRow(
+                        label = "Accuracy",
+                        score = ModelScoring.accuracyScore(model.benchmark),
+                        detail = formatAccuracyDetail(model.benchmark),
+                        barColor = Color(0xFFFFB800)
+                    )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                ModelMetricRow(
-                    label = "Speed",
-                    score = ModelScoring.speedScore(model.benchmark),
-                    detail = formatSpeedDetail(model.benchmark),
-                    barColor = VoiceInkColors.Success
-                )
+                    ModelMetricRow(
+                        label = "Speed",
+                        score = ModelScoring.speedScore(model.benchmark),
+                        detail = formatSpeedDetail(model.benchmark),
+                        barColor = VoiceInkColors.Success
+                    )
+                }
 
                 // Download progress
                 if (isDownloading) {
@@ -820,6 +829,20 @@ private fun ModelItem(
                         text = downloadState.message,
                         style = MaterialTheme.typography.labelSmall,
                         color = VoiceInkColors.Error
+                    )
+                }
+            }
+
+            if (model.benchmark != null) {
+                IconButton(
+                    onClick = { showBenchmarks = !showBenchmarks },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        if (showBenchmarks) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (showBenchmarks) "Hide benchmarks" else "Show benchmarks",
+                        tint = VoiceInkColors.TextMuted,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -972,6 +995,17 @@ private fun MetricBar(
             )
         }
     }
+}
+
+/** One-line "A 3/5 · S 4/5" for the collapsed row; null when nothing is known. */
+private fun compactScoreSummary(benchmark: ModelBenchmark?): String? {
+    val accuracy = ModelScoring.accuracyScore(benchmark)
+    val speed = ModelScoring.speedScore(benchmark)
+    if (accuracy == null && speed == null) return null
+    return listOfNotNull(
+        accuracy?.let { "A $it/5" },
+        speed?.let { "S $it/5" }
+    ).joinToString(" · ")
 }
 
 private fun formatAccuracyDetail(benchmark: ModelBenchmark?): String {

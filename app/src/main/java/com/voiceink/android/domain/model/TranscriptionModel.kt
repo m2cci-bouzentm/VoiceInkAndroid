@@ -187,7 +187,7 @@ object PredefinedModels {
         badge = ModelBadge.FASTEST,
         benchmark = ModelBenchmark(
             wer = 5.6556,
-            werDataset = "LibriSpeech test-clean",
+            werDataset = "LibriSpeech",
             paramsM = 39
         ),
         modelPath = "whisper-tiny-en",
@@ -207,7 +207,7 @@ object PredefinedModels {
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 6.34,
-            werDataset = "Open-ASR Leaderboard avg",
+            werDataset = "Open-ASR avg",
             paramsM = 600,
             avgSecPerFile = 6.0
         ),
@@ -226,7 +226,7 @@ object PredefinedModels {
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 3.432,
-            werDataset = "LibriSpeech test-clean",
+            werDataset = "LibriSpeech",
             paramsM = 244
         ),
         modelPath = "sherpa-onnx-whisper-small",
@@ -242,10 +242,10 @@ object PredefinedModels {
         id = "distil-whisper-large-v3",
         name = "Distil Whisper Large v3",
         description = "99+ langs, 6.3x faster",
-        badge = ModelBadge.RECOMMENDED,
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 9.7,
-            werDataset = "Short-form (model card)",
+            werDataset = "short-form",
             paramsM = 756,
             relativeLatency = 6.3
         ),
@@ -265,7 +265,7 @@ object PredefinedModels {
         badge = ModelBadge.MOST_ACCURATE,
         benchmark = ModelBenchmark(
             wer = 2.900409225488902,
-            werDataset = "LibriSpeech test-clean",
+            werDataset = "LibriSpeech",
             paramsM = 769
         ),
         modelPath = "sherpa-onnx-whisper-medium",
@@ -282,10 +282,10 @@ object PredefinedModels {
         id = "gemini-2.5-flash",
         name = "Gemini 2.5 Flash",
         description = "Google AI, latest model",
-        badge = ModelBadge.FASTEST,
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 12.1,
-            werDataset = "PriMock57 (medical)",
+            werDataset = "PriMock57 medical",
             avgSecPerFile = 20.0
         ),
         provider = ModelProvider.GEMINI,
@@ -296,10 +296,10 @@ object PredefinedModels {
         id = "openai-whisper",
         name = "OpenAI Whisper",
         description = "Industry standard API",
-        badge = ModelBadge.MOST_ACCURATE,
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 15.5,
-            werDataset = "PriMock57 (medical)",
+            werDataset = "PriMock57 medical",
             avgSecPerFile = 104.0
         ),
         provider = ModelProvider.OPENAI,
