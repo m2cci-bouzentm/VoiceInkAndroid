@@ -12,6 +12,8 @@ import com.voiceink.android.data.subscription.SubscriptionStatus
 import com.voiceink.android.data.subscription.SubscriptionTier
 import com.voiceink.android.domain.model.LocalModel
 import com.voiceink.android.domain.model.PredefinedModels
+import com.voiceink.android.domain.output.TranscriptDestination
+import com.voiceink.android.domain.output.TranscriptOutputRouter
 import com.voiceink.android.services.TextInjectionService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -28,6 +30,10 @@ data class SettingsUiState(
     val isAccessibilityEnabled: Boolean = false,
     val isOverlayEnabled: Boolean = false,
     val isAutoPunctuationEnabled: Boolean = false,
+    // Transcript destination
+    val transcriptDestination: TranscriptDestination = TranscriptDestination.TEXT_INJECTION,
+    val termuxScriptPath: String = TranscriptOutputRouter.DEFAULT_SCRIPT_PATH,
+    val transcriptPostUrl: String = "",
     // Usage & subscription
     val usageStats: UsageStats = UsageStats(0f, 0f, 0L, 0),
     val subscriptionTier: SubscriptionTier = SubscriptionTier.FREE
@@ -87,6 +93,26 @@ class SettingsViewModel @Inject constructor(
                 _uiState.value = state
             }
         }
+
+        // Kept out of the combine above, which is already at nine sources and
+        // indexes its values positionally.
+        viewModelScope.launch {
+            combine(
+                settingsRepository.transcriptDestination,
+                settingsRepository.termuxScriptPath,
+                settingsRepository.transcriptPostUrl
+            ) { destination, scriptPath, postUrl ->
+                Triple(destination, scriptPath, postUrl)
+            }.collect { (destination, scriptPath, postUrl) ->
+                _uiState.update {
+                    it.copy(
+                        transcriptDestination = destination,
+                        termuxScriptPath = scriptPath,
+                        transcriptPostUrl = postUrl
+                    )
+                }
+            }
+        }
     }
 
     private fun getDownloadedModels(): Set<String> {
@@ -111,6 +137,27 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(isAutoPunctuationEnabled = enabled) }
         viewModelScope.launch {
             settingsRepository.setAutoPunctuationEnabled(enabled)
+        }
+    }
+
+    fun setTranscriptDestination(destination: TranscriptDestination) {
+        _uiState.update { it.copy(transcriptDestination = destination) }
+        viewModelScope.launch {
+            settingsRepository.setTranscriptDestination(destination)
+        }
+    }
+
+    fun setTermuxScriptPath(path: String) {
+        _uiState.update { it.copy(termuxScriptPath = path) }
+        viewModelScope.launch {
+            settingsRepository.setTermuxScriptPath(path)
+        }
+    }
+
+    fun setTranscriptPostUrl(url: String) {
+        _uiState.update { it.copy(transcriptPostUrl = url) }
+        viewModelScope.launch {
+            settingsRepository.setTranscriptPostUrl(url)
         }
     }
 

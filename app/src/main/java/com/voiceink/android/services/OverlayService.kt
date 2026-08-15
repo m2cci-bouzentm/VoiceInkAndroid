@@ -32,12 +32,14 @@ import com.voiceink.android.data.preferences.SettingsRepository
 import com.voiceink.android.domain.model.PredefinedModels
 import com.voiceink.android.domain.model.LocalModel
 import com.voiceink.android.domain.model.TranscriptionModel
+import com.voiceink.android.domain.output.TranscriptOutputRouter
 import com.voiceink.android.domain.postprocessing.AutoPunctuationService
 import com.voiceink.android.domain.transcription.TranscriptionRegistry
 import com.voiceink.android.domain.transcription.TranscriptionResult
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -112,6 +114,9 @@ class OverlayService : Service() {
 
     @Inject
     lateinit var autoPunctuationService: AutoPunctuationService
+
+    @Inject
+    lateinit var transcriptOutputRouter: TranscriptOutputRouter
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var currentRecordingFile: File? = null
@@ -442,18 +447,19 @@ class OverlayService : Service() {
                     // Save to history before deleting the audio file
                     saveToHistory(finalText, model, audioFile, hadAutoPunctuation)
 
-                    // Try to inject text into focused field
-                    if (TextInjectionService.isServiceEnabled()) {
-                        val injected = TextInjectionService.injectText(finalText)
-                        if (injected) {
-                            Log.d(TAG, "Text injected successfully")
-                        } else {
-                            Log.d(TAG, "Text injection failed, copying to clipboard")
-                            copyToClipboard(finalText)
+                    // Route to the configured destination: type into the focused
+                    // app, hand to a Termux script, or POST it. Each falls back
+                    // to the clipboard so a transcript is never silently lost.
+                    val delivery = transcriptOutputRouter.deliver(finalText)
+                    Log.d(TAG, "Delivery: ${delivery.detail}")
+                    if (!delivery.ok) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                this@OverlayService,
+                                "VoiceInk: ${delivery.detail}",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
-                    } else {
-                        // Accessibility not enabled, copy to clipboard
-                        copyToClipboard(finalText)
                     }
                 }
                 is TranscriptionResult.Error -> {

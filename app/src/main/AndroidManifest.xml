@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required for floating overlay button -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Hand transcripts to a Termux script (RUN_COMMAND destination). Only the
+         F-Droid Termux exposes this service; the Play Store build does not. -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
+    <!-- Android 11+ package visibility. Without this Termux is invisible to us
+         and the service start fails to resolve. -->
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
 
     <application
         android:name=".VoiceInkApplication"
