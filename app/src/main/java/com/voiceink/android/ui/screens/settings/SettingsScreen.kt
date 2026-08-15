@@ -767,16 +767,24 @@ private fun ModelItem(
                     }
                 }
                 
-                Text(
-                    text = listOfNotNull(
-                        model.description,
-                        compactScoreSummary(model.benchmark)
-                    ).joinToString("  ·  "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = VoiceInkColors.TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = model.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = VoiceInkColors.TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    compactScoreSummary(model.benchmark)?.let { summary ->
+                        Text(
+                            text = "  ·  " + summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = VoiceInkColors.TextMuted,
+                            maxLines = 1
+                        )
+                    }
+                }
 
                 if (model is CloudModel && !isEnabled) {
                     Text(
