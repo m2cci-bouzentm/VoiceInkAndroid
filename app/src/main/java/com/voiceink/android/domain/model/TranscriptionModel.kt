@@ -55,15 +55,25 @@ data class ModelBenchmark(
  * This is a deliberately coarse binning to avoid false precision.
  */
 object ModelScoring {
+    /**
+     * WER is only meaningful against the benchmark it was measured on: 12% on
+     * PriMock57's accented medical speech is a better result than 6% on
+     * LibriSpeech's clean read audio. Binning every number on one scale made
+     * cloud models look broken, so each benchmark carries its own thresholds,
+     * ordered best-to-worst. A score therefore reads "how good for this
+     * benchmark", never "better than the model above it".
+     */
+    private val werThresholds: Map<String, List<Double>> = mapOf(
+        "LibriSpeech" to listOf(2.0, 3.0, 4.5, 7.0),
+        "Open-ASR avg" to listOf(6.0, 7.5, 9.0, 12.0),
+        "short-form" to listOf(8.0, 10.0, 12.0, 15.0),
+        "PriMock57 medical" to listOf(10.0, 13.0, 16.0, 20.0)
+    )
+
     fun accuracyScore(benchmark: ModelBenchmark?): Int? {
         val wer = benchmark?.wer ?: return null
-        return when {
-            wer <= 2.0 -> 5
-            wer <= 3.0 -> 4
-            wer <= 4.5 -> 3
-            wer <= 7.0 -> 2
-            else -> 1
-        }
+        val thresholds = werThresholds[benchmark.werDataset] ?: return null
+        return 5 - thresholds.count { wer > it }
     }
 
     fun speedScore(benchmark: ModelBenchmark?): Int? {
@@ -187,7 +197,7 @@ object PredefinedModels {
         badge = ModelBadge.FASTEST,
         benchmark = ModelBenchmark(
             wer = 5.6556,
-            werDataset = "LibriSpeech test-clean",
+            werDataset = "LibriSpeech",
             paramsM = 39
         ),
         modelPath = "whisper-tiny-en",
@@ -207,7 +217,7 @@ object PredefinedModels {
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 6.34,
-            werDataset = "Open-ASR Leaderboard avg",
+            werDataset = "Open-ASR avg",
             paramsM = 600,
             avgSecPerFile = 6.0
         ),
@@ -226,7 +236,7 @@ object PredefinedModels {
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 3.432,
-            werDataset = "LibriSpeech test-clean",
+            werDataset = "LibriSpeech",
             paramsM = 244
         ),
         modelPath = "sherpa-onnx-whisper-small",
@@ -242,10 +252,10 @@ object PredefinedModels {
         id = "distil-whisper-large-v3",
         name = "Distil Whisper Large v3",
         description = "99+ langs, 6.3x faster",
-        badge = ModelBadge.RECOMMENDED,
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 9.7,
-            werDataset = "Short-form (model card)",
+            werDataset = "short-form",
             paramsM = 756,
             relativeLatency = 6.3
         ),
@@ -265,7 +275,7 @@ object PredefinedModels {
         badge = ModelBadge.MOST_ACCURATE,
         benchmark = ModelBenchmark(
             wer = 2.900409225488902,
-            werDataset = "LibriSpeech test-clean",
+            werDataset = "LibriSpeech",
             paramsM = 769
         ),
         modelPath = "sherpa-onnx-whisper-medium",
@@ -282,10 +292,10 @@ object PredefinedModels {
         id = "gemini-2.5-flash",
         name = "Gemini 2.5 Flash",
         description = "Google AI, latest model",
-        badge = ModelBadge.FASTEST,
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 12.1,
-            werDataset = "PriMock57 (medical)",
+            werDataset = "PriMock57 medical",
             avgSecPerFile = 20.0
         ),
         provider = ModelProvider.GEMINI,
@@ -296,10 +306,10 @@ object PredefinedModels {
         id = "openai-whisper",
         name = "OpenAI Whisper",
         description = "Industry standard API",
-        badge = ModelBadge.MOST_ACCURATE,
+        badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 15.5,
-            werDataset = "PriMock57 (medical)",
+            werDataset = "PriMock57 medical",
             avgSecPerFile = 104.0
         ),
         provider = ModelProvider.OPENAI,

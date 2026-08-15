@@ -251,7 +251,14 @@ Each model now shows **Accuracy** and **Speed** bars in Settings using published
   https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/nemo-transducer-models.html  
 
 **Scoring (UI bins, not a claim of precise ranking)**
-- Accuracy uses WER bins (lower is better): `<=2.0 → 5`, `<=3.0 → 4`, `<=4.5 → 3`, `<=7.0 → 2`, else `1`.
+- Accuracy bins are **per benchmark**, since a WER is only comparable to other
+  numbers from the same dataset. Thresholds (best → worst, lower WER is better):
+  - `LibriSpeech`: `2.0 / 3.0 / 4.5 / 7.0`
+  - `Open-ASR avg`: `6.0 / 7.5 / 9.0 / 12.0`
+  - `short-form`: `8.0 / 10.0 / 12.0 / 15.0`
+  - `PriMock57 medical`: `10.0 / 13.0 / 16.0 / 20.0`
+  - An unrecognised `werDataset` scores `N/A` rather than guessing a scale.
+  - A score means "good for this benchmark", not "better than the row above".
 - Speed uses: `RTFx`, else `avg sec/file`, else `relative latency`, else `tokens/sec`, else `paramsM`.
   - RTFx bins: `>=1000 → 5`, `>=100 → 4`, `>=10 → 3`, `>=1 → 2`, else `1`.
   - Avg sec/file bins: `<=5s → 5`, `<=10s → 4`, `<=20s → 3`, `<=40s → 2`, else `1`.

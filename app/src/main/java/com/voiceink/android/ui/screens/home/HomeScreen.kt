@@ -104,7 +104,7 @@ fun HomeScreen(
                     .padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Floating button hint
                 AnimatedVisibility(
@@ -118,7 +118,7 @@ fun HomeScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Model selector
                 selectedModel?.let { model ->
@@ -128,7 +128,7 @@ fun HomeScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Transcription result area
                 TranscriptionCard(
@@ -155,7 +155,7 @@ fun HomeScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Record button
                 val isProcessing = recordingState == RecordingState.PROCESSING || uiState.isLoading
@@ -180,7 +180,7 @@ fun HomeScreen(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(28.dp))
             }
         }
     }
@@ -195,29 +195,22 @@ private fun PremiumTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text(
-                text = "VoiceInk",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = VoiceInkColors.TextPrimary
-            )
-            Text(
-                text = "Speech to text",
-                style = MaterialTheme.typography.bodySmall,
-                color = VoiceInkColors.TextMuted
-            )
-        }
+        Text(
+            text = "VoiceInk",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = VoiceInkColors.TextPrimary
+        )
 
         Row {
             IconButton(
                 onClick = onGuideClick,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .background(
                         color = VoiceInkColors.SurfaceLight,
                         shape = CircleShape
@@ -235,7 +228,7 @@ private fun PremiumTopBar(
             IconButton(
                 onClick = onHistoryClick,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .background(
                         color = VoiceInkColors.SurfaceLight,
                         shape = CircleShape
@@ -253,7 +246,7 @@ private fun PremiumTopBar(
             IconButton(
                 onClick = onSettingsClick,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .background(
                         color = VoiceInkColors.SurfaceLight,
                         shape = CircleShape
@@ -277,7 +270,7 @@ private fun HintCard(
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = VoiceInkColors.SurfaceLight
         )
@@ -285,12 +278,12 @@ private fun HintCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(28.dp)
                     .background(
                         brush = Brush.linearGradient(
                             colors = listOf(
@@ -306,20 +299,20 @@ private fun HintCard(
                     Icons.Outlined.TouchApp,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Enable Floating Button",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = VoiceInkColors.TextPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     "Record from any app with one tap",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = VoiceInkColors.TextMuted
                 )
             }
@@ -373,18 +366,24 @@ private fun TranscriptionCard(
     // Determine which text to show
     val displayText = enhancedText ?: transcription
     val isShowingEnhanced = enhancedText != null
+    // An empty idle card is just a large hollow rectangle, so drop its chrome.
+    val isEmptyIdle = displayText.isEmpty() && error == null && recordingState == RecordingState.IDLE
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .border(
                 width = 1.dp,
-                color = if (isShowingEnhanced) VoiceInkColors.Primary.copy(alpha = 0.5f) else VoiceInkColors.GlassBorder,
-                shape = RoundedCornerShape(24.dp)
+                color = when {
+                    isEmptyIdle -> Color.Transparent
+                    isShowingEnhanced -> VoiceInkColors.Primary.copy(alpha = 0.5f)
+                    else -> VoiceInkColors.GlassBorder
+                },
+                shape = RoundedCornerShape(16.dp)
             ),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = VoiceInkColors.Surface
+            containerColor = if (isEmptyIdle) Color.Transparent else VoiceInkColors.Surface
         )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -416,7 +415,7 @@ private fun TranscriptionCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .padding(14.dp)
             ) {
                 if (displayText.isEmpty()) {
                     Column(
