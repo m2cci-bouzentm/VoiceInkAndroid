@@ -218,8 +218,19 @@ class OverlayService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start foreground service", e)
-            stopSelf()
+            // Once startForegroundService() has been called the platform demands
+            // a matching startForeground(), and kills the process with
+            // ForegroundServiceDidNotStartInTimeException if it never lands.
+            // So bailing out here is not enough — retry without a service type,
+            // and only give up if even that fails.
+            Log.e(TAG, "Failed to start foreground service with type", e)
+            try {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, 0)
+                Log.w(TAG, "Started foreground without a service type")
+            } catch (fallback: Exception) {
+                Log.e(TAG, "Foreground start failed outright", fallback)
+                stopSelf()
+            }
         }
     }
 

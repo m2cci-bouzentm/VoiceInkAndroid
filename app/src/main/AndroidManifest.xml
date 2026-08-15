@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required for floating overlay button -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- The overlay button records audio from a foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Hand transcripts to a Termux script (RUN_COMMAND destination). Only the
          F-Droid Termux exposes this service; the Play Store build does not. -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
@@ -41,9 +44,16 @@
             </intent-filter>
         </activity>
 
-        <!-- Foreground service for floating overlay recording button -->
+        <!-- Foreground service for floating overlay recording button.
+             foregroundServiceType must be declared here: the service passes
+             FOREGROUND_SERVICE_TYPE_MICROPHONE to startForeground() once mic
+             permission is granted, and without a matching (or superset)
+             attribute the platform throws IllegalArgumentException. That throw
+             leaves startForeground() uncalled, so the system then kills the
+             process with ForegroundServiceDidNotStartInTimeException. -->
         <service
             android:name=".services.OverlayService"
+            android:foregroundServiceType="microphone"
             android:exported="false" />
 
         <!-- VoiceInk Input Method (Voice-only keyboard) -->
