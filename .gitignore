@@ -14,6 +14,10 @@ local.properties
 keystore.properties
 *.keystore
 *.jks
+# Exception: the debug keystore is committed on purpose so CI-built debug APKs
+# keep a stable signature and can be installed as updates. It holds the standard
+# public Android debug credentials and cannot sign a release.
+!app/debug.keystore
 
 # Android SDK (should not be in repo)
 /build-tools/

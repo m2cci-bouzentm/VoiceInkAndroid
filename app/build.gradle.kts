@@ -19,6 +19,21 @@ android {
     compileSdk = 35
 
     signingConfigs {
+        // Without this, debug builds are signed with Gradle's auto-generated
+        // ~/.android/debug.keystore, which every CI runner creates fresh. Each
+        // build then has a different signature, so installing a new APK over an
+        // older one fails and the app has to be uninstalled first — losing all
+        // its settings. A committed keystore keeps the signature stable.
+        //
+        // Not a secret: these are the standard Android debug credentials, and a
+        // debug key can neither publish nor update a release build.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+
         create("release") {
             storeFile = file(keystoreProperties["storeFile"] as? String ?: "voiceink-release.keystore")
             storePassword = keystoreProperties["storePassword"] as? String ?: ""
