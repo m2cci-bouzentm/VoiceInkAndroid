@@ -53,7 +53,7 @@ class HomeViewModel @Inject constructor(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = PredefinedModels.gemini25Flash
+            initialValue = PredefinedModels.gemini35Transcribe
         )
 
     private val selectedLanguage: StateFlow<String> = settingsRepository.selectedLanguage

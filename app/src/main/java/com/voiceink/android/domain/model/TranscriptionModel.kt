@@ -288,20 +288,27 @@ object PredefinedModels {
     // ==================== CLOUD MODELS (Requires Internet + API Key) ====================
     // Note: Cloud model benchmarks vary by audio quality/length
     
-    val gemini25Flash = CloudModel(
-        id = "gemini-2.5-flash",
-        name = "Gemini 2.5 Flash",
-        description = "Google AI, latest model",
-        badge = ModelBadge.NONE,
-        benchmark = ModelBenchmark(
-            wer = 12.1,
-            werDataset = "PriMock57 medical",
-            avgSecPerFile = 20.0
-        ),
+    // Purpose-built transcription model rather than a general multimodal one.
+    val gemini35Transcribe = CloudModel(
+        id = "gemini-3.5-transcribe",
+        name = "Gemini 3.5 Transcribe",
+        description = "Google AI, built for speech",
+        badge = ModelBadge.RECOMMENDED,
+        benchmark = null,
         provider = ModelProvider.GEMINI,
-        modelIdentifier = "gemini-2.5-flash"
+        modelIdentifier = "gemini-3.5-transcribe"
     )
-    
+
+    val gemini38Flash = CloudModel(
+        id = "gemini-3.8-flash",
+        name = "Gemini 3.8 Flash",
+        description = "Google AI, latest multimodal",
+        badge = ModelBadge.NONE,
+        benchmark = null,
+        provider = ModelProvider.GEMINI,
+        modelIdentifier = "gemini-3.8-flash"
+    )
+
     val openaiWhisper = CloudModel(
         id = "openai-whisper",
         name = "OpenAI Whisper",
@@ -316,20 +323,6 @@ object PredefinedModels {
         modelIdentifier = "whisper-1"
     )
     
-    // Gemini 2.0 (older version, still functional)
-    val gemini20Flash = CloudModel(
-        id = "gemini-2.0-flash",
-        name = "Gemini 2.0 Flash",
-        description = "Google AI, stable version",
-        badge = ModelBadge.NONE,
-        benchmark = ModelBenchmark(
-            tokensPerSecond = 61.7,
-            ttftMs = 640.0
-        ),
-        provider = ModelProvider.GEMINI,
-        modelIdentifier = "gemini-2.0-flash"
-    )
-
     /**
      * OpenRouter routes to hundreds of models and the catalogue moves weekly, so
      * shipping a hardcoded list would be stale immediately and mostly noise. The
@@ -356,8 +349,8 @@ object PredefinedModels {
     )
 
     private val cloudModelList: List<CloudModel> = listOf(
-        gemini25Flash,
-        gemini20Flash,
+        gemini35Transcribe,
+        gemini38Flash,
         openaiWhisper,
         openRouterCustom
     )
