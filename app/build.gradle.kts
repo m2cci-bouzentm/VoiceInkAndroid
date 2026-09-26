@@ -64,6 +64,11 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
         }
+        create("agent") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".agent"
+            matchingFallbacks += listOf("debug")
+        }
     }
 
     compileOptions {

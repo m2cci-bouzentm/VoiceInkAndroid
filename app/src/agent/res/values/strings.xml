@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VoiceInk Agent</string>
+    <string name="overlay_notification_title">VoiceInk Agent Recording</string>
+</resources>
