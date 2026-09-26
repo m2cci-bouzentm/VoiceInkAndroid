@@ -1,49 +1,46 @@
 package com.voiceink.android.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import com.voiceink.android.BuildConfig
 
-// Premium Dark Theme Colors
+// The Agent build gets its own blue identity; the original build keeps its green palette.
 object VoiceInkColors {
-    // Primary gradient colors (vibrant green)
-    val Primary = Color(0xFF22C55E)      // Green-500
-    val PrimaryLight = Color(0xFF4ADE80) // Green-400
-    val PrimaryDark = Color(0xFF16A34A)  // Green-600
-    
-    // Secondary accent (teal for contrast)
-    val Secondary = Color(0xFF14B8A6)
-    val SecondaryLight = Color(0xFF2DD4BF)
-    
-    // Background layers (rich dark)
-    val Background = Color(0xFF0A0A0F)
-    val BackgroundElevated = Color(0xFF0F1419)
-    val Surface = Color(0xFF1A1F26)
-    val SurfaceLight = Color(0xFF242C36)
-    val SurfaceBright = Color(0xFF2E3844)
-    
-    // Text colors
+    private val isAgent = BuildConfig.BUILD_TYPE == "agent"
+
+    val Primary = Color(if (isAgent) 0xFF3B82F6 else 0xFF22C55E)
+    val PrimaryLight = Color(if (isAgent) 0xFF60A5FA else 0xFF4ADE80)
+    val PrimaryDark = Color(if (isAgent) 0xFF2563EB else 0xFF16A34A)
+
+    val Secondary = Color(if (isAgent) 0xFF38BDF8 else 0xFF14B8A6)
+    val SecondaryLight = Color(if (isAgent) 0xFF7DD3FC else 0xFF2DD4BF)
+
+    val Background = Color(if (isAgent) 0xFF081426 else 0xFF0A0A0F)
+    val BackgroundElevated = Color(if (isAgent) 0xFF0B1B32 else 0xFF0F1419)
+    val Surface = Color(if (isAgent) 0xFF10243D else 0xFF1A1F26)
+    val SurfaceLight = Color(if (isAgent) 0xFF17314F else 0xFF242C36)
+    val SurfaceBright = Color(if (isAgent) 0xFF214363 else 0xFF2E3844)
+
     val TextPrimary = Color(0xFFF8FAFC)
     val TextSecondary = Color(0xFF94A3B8)
     val TextMuted = Color(0xFF64748B)
-    
-    // Status colors
+
+    // Keep error and warning semantic; recolor green status accents for Agent.
     val Error = Color(0xFFEF4444)
     val ErrorDark = Color(0xFFDC2626)
-    val Success = Color(0xFF10B981)
-    val SuccessLight = Color(0xFF34D399)
+    val Success = Color(if (isAgent) 0xFF60A5FA else 0xFF10B981)
+    val SuccessLight = Color(if (isAgent) 0xFF93C5FD else 0xFF34D399)
     val Warning = Color(0xFFF59E0B)
-    
-    // Recording state
-    val Recording = Color(0xFFEF4444)
-    val RecordingGlow = Color(0x40EF4444)
-    
-    // Glass effect colors
+
+    val Recording = Color(if (isAgent) 0xFF1D4ED8 else 0xFFEF4444)
+    val RecordingGlow = Color(if (isAgent) 0x401D4ED8 else 0x40EF4444)
+
     val GlassWhite = Color(0x15FFFFFF)
     val GlassBorder = Color(0x20FFFFFF)
-    
-    // Gradient colors for buttons/cards
-    val GradientStart = Color(0xFF4ADE80)  // Green-400
-    val GradientMiddle = Color(0xFF22C55E) // Green-500
-    val GradientEnd = Color(0xFF15803D)    // Green-700
+
+    val GradientStart = PrimaryLight
+    val GradientMiddle = Primary
+    val GradientEnd = Color(if (isAgent) 0xFF1E40AF else 0xFF15803D)
+    val OpenAIProvider = Color(if (isAgent) 0xFF3B82F6 else 0xFF10A37F)
 }
 
 // Keep these for Material3 compatibility

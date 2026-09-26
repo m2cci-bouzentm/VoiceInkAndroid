@@ -725,7 +725,7 @@ private fun ModelItem(
                         color = when (model.provider) {
                             ModelProvider.LOCAL -> VoiceInkColors.Secondary.copy(alpha = 0.15f)
                             ModelProvider.GEMINI -> Color(0xFF4285F4).copy(alpha = 0.15f)
-                            ModelProvider.OPENAI -> Color(0xFF10A37F).copy(alpha = 0.15f)
+                            ModelProvider.OPENAI -> VoiceInkColors.OpenAIProvider.copy(alpha = 0.15f)
                             ModelProvider.OPENROUTER -> Color(0xFF8B5CF6).copy(alpha = 0.15f)
                         },
                         shape = RoundedCornerShape(10.dp)
@@ -738,7 +738,7 @@ private fun ModelItem(
                     tint = when (model.provider) {
                         ModelProvider.LOCAL -> VoiceInkColors.Secondary
                         ModelProvider.GEMINI -> Color(0xFF4285F4)
-                        ModelProvider.OPENAI -> Color(0xFF10A37F)
+                        ModelProvider.OPENAI -> VoiceInkColors.OpenAIProvider
                         ModelProvider.OPENROUTER -> Color(0xFF8B5CF6)
                     },
                     modifier = Modifier.size(16.dp)
