@@ -164,6 +164,64 @@ data class CloudModel(
 ) : TranscriptionModel
 
 /**
+ * Where a typed model id is sent.
+ *
+ * A slash (`google/gemini-3.5-flash`) is an OpenRouter slug. A bare
+ * `gemini…` id uses the Gemini API. A bare `gpt-` / `whisper` id uses the
+ * OpenAI Audio API. Anything else needs an explicit provider choice.
+ */
+data class CustomModelTarget(
+    val provider: ModelProvider,
+    val modelId: String
+) {
+    companion object {
+        const val CHOICE_AUTO = "auto"
+        const val CHOICE_GEMINI = "gemini"
+        const val CHOICE_OPENAI = "openai"
+        const val CHOICE_OPENROUTER = "openrouter"
+
+        fun parse(raw: String, choice: String): CustomModelTarget? {
+            val modelId = raw.trim()
+            if (modelId.isEmpty()) return null
+            val provider = forcedProvider(choice) ?: detect(modelId) ?: return null
+            return CustomModelTarget(provider, modelId)
+        }
+
+        fun detect(modelId: String): ModelProvider? {
+            val id = modelId.trim()
+            if ('/' in id) return ModelProvider.OPENROUTER
+            if (id.startsWith("gemini")) return ModelProvider.GEMINI
+            if (id.startsWith("gpt-") || id.startsWith("whisper") || id.startsWith("chatgpt-")) {
+                return ModelProvider.OPENAI
+            }
+            return null
+        }
+
+        fun routeLabel(raw: String, choice: String): String {
+            val id = raw.trim()
+            if (id.isEmpty()) {
+                return "gemini-3.5-transcribe \u2192 Gemini. gpt-transcribe \u2192 OpenAI. google/\u2026 \u2192 OpenRouter."
+            }
+            val target = parse(id, choice) ?: return "Provider unclear. Pick Gemini, OpenAI, or OpenRouter."
+            val name = when (target.provider) {
+                ModelProvider.GEMINI -> "Gemini"
+                ModelProvider.OPENAI -> "OpenAI"
+                ModelProvider.OPENROUTER -> "OpenRouter"
+                ModelProvider.LOCAL -> "on device"
+            }
+            return "Sends $id to $name"
+        }
+
+        private fun forcedProvider(choice: String): ModelProvider? = when (choice.trim().lowercase()) {
+            CHOICE_GEMINI -> ModelProvider.GEMINI
+            CHOICE_OPENAI -> ModelProvider.OPENAI
+            CHOICE_OPENROUTER -> ModelProvider.OPENROUTER
+            else -> null
+        }
+    }
+}
+
+/**
  * Predefined models available in the app
  * 
  * BENCHMARK SOURCES (trustworthy, do not guess numbers):
@@ -309,10 +367,21 @@ object PredefinedModels {
         modelIdentifier = "gemini-3.8-flash"
     )
 
+    // OpenAI's recommended file-transcription model (Audio API, 2026).
+    val gptTranscribe = CloudModel(
+        id = "gpt-transcribe",
+        name = "GPT Transcribe",
+        description = "OpenAI, current file transcription",
+        badge = ModelBadge.NONE,
+        benchmark = null,
+        provider = ModelProvider.OPENAI,
+        modelIdentifier = "gpt-transcribe"
+    )
+
     val openaiWhisper = CloudModel(
         id = "openai-whisper",
         name = "OpenAI Whisper",
-        description = "Industry standard API",
+        description = "Legacy OpenAI file API",
         badge = ModelBadge.NONE,
         benchmark = ModelBenchmark(
             wer = 15.5,
@@ -322,17 +391,18 @@ object PredefinedModels {
         provider = ModelProvider.OPENAI,
         modelIdentifier = "whisper-1"
     )
-    
+
+    const val CUSTOM_ID = "custom"
+
     /**
-     * OpenRouter routes to hundreds of models and the catalogue moves weekly, so
-     * shipping a hardcoded list would be stale immediately and mostly noise. The
-     * user types the model slug themselves; `modelIdentifier` is only a
-     * placeholder, and the real value is read from settings at call time.
+     * One typed id for every cloud provider. The list row is a placeholder;
+     * [resolveSelection] builds the real [CloudModel] from the saved id.
+     * `provider` here is unused at request time.
      */
-    val openRouterCustom = CloudModel(
-        id = "openrouter-custom",
-        name = "OpenRouter",
-        description = "Any audio-capable model — you name it",
+    val customModel = CloudModel(
+        id = CUSTOM_ID,
+        name = "Custom model",
+        description = "Any Gemini, OpenAI, or OpenRouter id",
         badge = ModelBadge.NONE,
         benchmark = null,
         provider = ModelProvider.OPENROUTER,
@@ -351,9 +421,42 @@ object PredefinedModels {
     private val cloudModelList: List<CloudModel> = listOf(
         gemini35Transcribe,
         gemini38Flash,
+        gptTranscribe,
         openaiWhisper,
-        openRouterCustom
+        customModel
     )
+
+    private const val LEGACY_OPENROUTER_ID = "openrouter-custom"
+
+    /**
+     * Preset rows use their baked-in id. Custom (and the old OpenRouter row)
+     * use the typed id, routed by [CustomModelTarget].
+     */
+    fun resolveSelection(
+        selectedId: String,
+        customModelId: String,
+        customProvider: String
+    ): TranscriptionModel? {
+        val legacyOpenRouter = selectedId == LEGACY_OPENROUTER_ID
+        if (selectedId != CUSTOM_ID && !legacyOpenRouter) {
+            return allModels.find { it.id == selectedId }
+        }
+        // Old installs stored an OpenRouter slug on this row. Keep sending
+        // those to OpenRouter until the user picks a provider themselves.
+        val choice = if (legacyOpenRouter && customProvider == CustomModelTarget.CHOICE_AUTO) {
+            CustomModelTarget.CHOICE_OPENROUTER
+        } else {
+            customProvider
+        }
+        val target = CustomModelTarget.parse(customModelId, choice) ?: return null
+        return CloudModel(
+            id = CUSTOM_ID,
+            name = target.modelId,
+            description = customModel.description,
+            provider = target.provider,
+            modelIdentifier = target.modelId
+        )
+    }
 
     // Main models shown to users (curated, clear choices)
     val featuredModels: List<TranscriptionModel> = localModelList + cloudModelList

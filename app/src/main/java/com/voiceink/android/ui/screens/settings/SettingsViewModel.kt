@@ -27,6 +27,8 @@ data class SettingsUiState(
     val openaiApiKey: String = "",
     val openRouterApiKey: String = "",
     val openRouterModelId: String = "",
+    val customModelId: String = "",
+    val customModelProvider: String = "auto",
     val downloadStates: Map<String, DownloadState> = emptyMap(),
     val downloadedModels: Set<String> = emptySet(),
     val isAccessibilityEnabled: Boolean = false,
@@ -140,11 +142,17 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 settingsRepository.openRouterApiKey,
-                settingsRepository.openRouterModelId
-            ) { key, modelId -> key to modelId }
-                .collect { (key, modelId) ->
+                settingsRepository.customModelId,
+                settingsRepository.customModelProvider
+            ) { key, modelId, provider -> Triple(key, modelId, provider) }
+                .collect { (key, modelId, provider) ->
                     _uiState.update {
-                        it.copy(openRouterApiKey = key, openRouterModelId = modelId)
+                        it.copy(
+                            openRouterApiKey = key,
+                            openRouterModelId = modelId,
+                            customModelId = modelId,
+                            customModelProvider = provider
+                        )
                     }
                 }
         }
@@ -183,9 +191,20 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setOpenRouterModelId(modelId: String) {
-        _uiState.update { it.copy(openRouterModelId = modelId) }
+        setCustomModelId(modelId)
+    }
+
+    fun setCustomModelId(modelId: String) {
+        _uiState.update { it.copy(customModelId = modelId, openRouterModelId = modelId) }
         viewModelScope.launch {
-            settingsRepository.setOpenRouterModelId(modelId)
+            settingsRepository.setCustomModelId(modelId)
+        }
+    }
+
+    fun setCustomModelProvider(provider: String) {
+        _uiState.update { it.copy(customModelProvider = provider) }
+        viewModelScope.launch {
+            settingsRepository.setCustomModelProvider(provider)
         }
     }
 

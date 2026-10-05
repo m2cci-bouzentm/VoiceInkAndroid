@@ -58,11 +58,12 @@ class OpenRouterTranscriptionService @Inject constructor(
                     return@withContext TranscriptionResult.Error("OpenRouter API key not configured")
                 }
 
-                val modelId = settingsRepository.openRouterModelId.first().trim()
+                val modelId = model.modelIdentifier.trim().ifBlank {
+                    settingsRepository.customModelId.first().trim()
+                }
                 if (modelId.isBlank()) {
                     return@withContext TranscriptionResult.Error(
-                        "No OpenRouter model set. Enter a model ID in Settings, " +
-                            "for example google/gemini-2.5-flash"
+                        "No model id set. Enter one in Settings, for example google/gemini-3.5-flash"
                     )
                 }
 

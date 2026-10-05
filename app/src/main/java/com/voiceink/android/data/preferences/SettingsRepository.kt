@@ -33,6 +33,8 @@ class SettingsRepository @Inject constructor(
         val SELECTED_LANGUAGE = stringPreferencesKey("selected_language")
         val OPENROUTER_API_KEY = stringPreferencesKey("openrouter_api_key")
         val OPENROUTER_MODEL_ID = stringPreferencesKey("openrouter_model_id")
+        val CUSTOM_MODEL_ID = stringPreferencesKey("custom_model_id")
+        val CUSTOM_MODEL_PROVIDER = stringPreferencesKey("custom_model_provider")
         val TRANSCRIPT_DESTINATION = stringPreferencesKey("transcript_destination")
         val TERMUX_SCRIPT_PATH = stringPreferencesKey("termux_script_path")
         val TRANSCRIPT_POST_URL = stringPreferencesKey("transcript_post_url")
@@ -113,16 +115,34 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    // Typed by the user: OpenRouter's catalogue is too large and too fast-moving
-    // to enumerate, e.g. "google/gemini-2.5-flash".
-    val openRouterModelId: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.OPENROUTER_MODEL_ID] ?: ""
+    // Typed by the user. One field for every provider: a bare Gemini or
+    // OpenAI id, or an OpenRouter slug (vendor/model). Older builds stored
+    // the OpenRouter slug in OPENROUTER_MODEL_ID; fall back to that until
+    // the new key is written.
+    val customModelId: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.CUSTOM_MODEL_ID] ?: prefs[Keys.OPENROUTER_MODEL_ID] ?: ""
     }
 
-    suspend fun setOpenRouterModelId(modelId: String) {
+    suspend fun setCustomModelId(modelId: String) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.OPENROUTER_MODEL_ID] = modelId
+            prefs[Keys.CUSTOM_MODEL_ID] = modelId
         }
+    }
+
+    val customModelProvider: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.CUSTOM_MODEL_PROVIDER] ?: "auto"
+    }
+
+    suspend fun setCustomModelProvider(provider: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CUSTOM_MODEL_PROVIDER] = provider
+        }
+    }
+
+    val openRouterModelId: Flow<String> = customModelId
+
+    suspend fun setOpenRouterModelId(modelId: String) {
+        setCustomModelId(modelId)
     }
 
     // Where finished transcripts are sent. See TranscriptDestination.

@@ -436,8 +436,19 @@ class OverlayService : Service() {
         try {
             // Get selected model
             val modelId = settingsRepository.selectedModelId.first()
-            val model = PredefinedModels.allModels.find { it.id == modelId }
-                ?: PredefinedModels.gemini35Transcribe
+            val customId = settingsRepository.customModelId.first()
+            val customProvider = settingsRepository.customModelProvider.first()
+            val model = PredefinedModels.resolveSelection(modelId, customId, customProvider)
+            if (model == null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@OverlayService,
+                        "VoiceInk: enter a custom model id in Settings",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                return
+            }
 
             Log.d(TAG, "Transcribing with model: ${model.name}")
 

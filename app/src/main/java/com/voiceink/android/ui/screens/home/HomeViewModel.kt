@@ -46,11 +46,13 @@ class HomeViewModel @Inject constructor(
 
     val recordingState: StateFlow<RecordingState> = audioRecorder.state
 
-    val selectedModel: StateFlow<TranscriptionModel?> = settingsRepository.selectedModelId
-        .map { modelId ->
-            PredefinedModels.allModels.find { it.id == modelId }
-        }
-        .stateIn(
+    val selectedModel: StateFlow<TranscriptionModel?> = combine(
+        settingsRepository.selectedModelId,
+        settingsRepository.customModelId,
+        settingsRepository.customModelProvider
+    ) { modelId, customId, provider ->
+        PredefinedModels.resolveSelection(modelId, customId, provider)
+    }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = PredefinedModels.gemini35Transcribe
@@ -156,7 +158,7 @@ class HomeViewModel @Inject constructor(
 
         val model = selectedModel.value
         if (model == null) {
-            _uiState.update { it.copy(error = "No model selected") }
+            _uiState.update { it.copy(error = "Enter a custom model id in Settings") }
             return
         }
 

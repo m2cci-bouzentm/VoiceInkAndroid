@@ -4,7 +4,10 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
+import com.voiceink.android.domain.model.CustomModelTarget
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -250,20 +253,22 @@ fun SettingsScreen(
                 val modelSize = if (model is LocalModel) viewModel.getModelSize(model) else 0L
                 
                 val hasRequiredApiKey = when {
+                    model.id == PredefinedModels.CUSTOM_ID -> true
                     model is CloudModel && model.provider == ModelProvider.GEMINI -> uiState.geminiApiKey.isNotBlank()
                     model is CloudModel && model.provider == ModelProvider.OPENAI -> uiState.openaiApiKey.isNotBlank()
                     model is CloudModel && model.provider == ModelProvider.OPENROUTER ->
-                        uiState.openRouterApiKey.isNotBlank() && uiState.openRouterModelId.isNotBlank()
+                        uiState.openRouterApiKey.isNotBlank()
                     else -> true
                 }
                 val canUseCloudModel = hasRequiredApiKey
                 
                 ModelItem(
                     model = model,
-                    isSelected = model.id == uiState.selectedModelId,
+                    isSelected = model.id == uiState.selectedModelId ||
+                        (model.id == PredefinedModels.CUSTOM_ID && uiState.selectedModelId == "openrouter-custom"),
                     isDownloaded = model.id in uiState.downloadedModels,
                     downloadState = uiState.downloadStates[model.id] ?: DownloadState.Idle,
-                    isEnabled = if (model is CloudModel) canUseCloudModel else true,
+                    isEnabled = if (model.id == PredefinedModels.CUSTOM_ID) true else if (model is CloudModel) canUseCloudModel else true,
                     onClick = {
                         val canSelect = when {
                             isLocalModel -> model.id in uiState.downloadedModels
@@ -289,8 +294,50 @@ fun SettingsScreen(
                 )
             }
 
+            item {
+                SettingsGroup {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PlainTextField(
+                        label = "Custom model ID",
+                        value = uiState.customModelId,
+                        onValueChange = { typed ->
+                            viewModel.setCustomModelId(typed)
+                            if (uiState.selectedModelId != PredefinedModels.CUSTOM_ID) {
+                                viewModel.selectModel(PredefinedModels.CUSTOM_ID)
+                            }
+                        },
+                        placeholder = "gpt-transcribe or google/gemini-3.5-flash"
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ProviderChoiceRow(
+                        selected = uiState.customModelProvider,
+                        onSelect = { choice ->
+                            viewModel.setCustomModelProvider(choice)
+                            if (uiState.selectedModelId != PredefinedModels.CUSTOM_ID) {
+                                viewModel.selectModel(PredefinedModels.CUSTOM_ID)
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = CustomModelTarget.routeLabel(
+                            uiState.customModelId,
+                            uiState.customModelProvider
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = VoiceInkColors.TextMuted,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+
             // Language Selection
-            val selectedModel = PredefinedModels.allModels.find { it.id == uiState.selectedModelId }
+            val selectedModel = PredefinedModels.resolveSelection(
+                uiState.selectedModelId,
+                uiState.customModelId,
+                uiState.customModelProvider
+            )
             val showLanguageSelector = when (selectedModel) {
                 is LocalModel -> selectedModel.supportsLanguageSelection
                 is CloudModel -> true
@@ -497,18 +544,8 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Typed, not picked: OpenRouter fronts hundreds of models and
-                    // the list changes constantly, so any bundled dropdown would
-                    // be stale and mostly irrelevant to a given user.
-                    PlainTextField(
-                        label = "OpenRouter model",
-                        value = uiState.openRouterModelId,
-                        onValueChange = viewModel::setOpenRouterModelId,
-                        placeholder = "google/gemini-2.5-flash"
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Must accept audio input. Browse at openrouter.ai/models",
+                        text = "Model id is the Custom model field above. A slash (google/\u2026) uses OpenRouter.",
                         style = MaterialTheme.typography.labelSmall,
                         color = VoiceInkColors.TextMuted,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -1237,6 +1274,41 @@ private fun TranscriptDestinationSelector(
                     color = VoiceInkColors.TextPrimary
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProviderChoiceRow(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(
+            CustomModelTarget.CHOICE_AUTO to "Auto",
+            CustomModelTarget.CHOICE_GEMINI to "Gemini",
+            CustomModelTarget.CHOICE_OPENAI to "OpenAI",
+            CustomModelTarget.CHOICE_OPENROUTER to "OpenRouter"
+        ).forEach { (id, label) ->
+            FilterChip(
+                selected = selected == id,
+                onClick = { onSelect(id) },
+                label = {
+                    Text(label, style = MaterialTheme.typography.labelMedium)
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = VoiceInkColors.Primary,
+                    selectedLabelColor = Color.White,
+                    containerColor = Color.Transparent,
+                    labelColor = VoiceInkColors.TextPrimary
+                )
+            )
         }
     }
 }

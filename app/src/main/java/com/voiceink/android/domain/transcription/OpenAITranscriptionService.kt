@@ -56,7 +56,14 @@ class OpenAITranscriptionService @Inject constructor(
                     .addFormDataPart("response_format", "json")
 
                 if (language != "auto") {
-                    requestBuilder.addFormDataPart("language", language)
+                    // gpt-transcribe takes `languages` and rejects `language`.
+                    if (model.modelIdentifier == "gpt-transcribe" ||
+                        model.modelIdentifier.startsWith("gpt-transcribe-")
+                    ) {
+                        requestBuilder.addFormDataPart("languages[]", language)
+                    } else {
+                        requestBuilder.addFormDataPart("language", language)
+                    }
                 }
 
                 val requestBody = requestBuilder.build()
