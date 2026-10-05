@@ -168,7 +168,7 @@ data class CloudModel(
  *
  * A slash (`google/gemini-3.5-flash`) is an OpenRouter slug. A bare
  * `gemini…` id uses the Gemini API. A bare `gpt-` / `whisper` id uses the
- * OpenAI Audio API. Anything else needs an explicit provider choice.
+ * OpenAI Audio API.
  */
 data class CustomModelTarget(
     val provider: ModelProvider,
@@ -197,19 +197,19 @@ data class CustomModelTarget(
             return null
         }
 
-        fun routeLabel(raw: String, choice: String): String {
+        fun routeLabel(raw: String): String {
             val id = raw.trim()
             if (id.isEmpty()) {
-                return "gemini-3.5-transcribe \u2192 Gemini. gpt-transcribe \u2192 OpenAI. google/\u2026 \u2192 OpenRouter."
+                return "gemini-\u2026 uses Gemini. gpt-\u2026 or whisper-\u2026 uses OpenAI. vendor/model uses OpenRouter."
             }
-            val target = parse(id, choice) ?: return "Provider unclear. Pick Gemini, OpenAI, or OpenRouter."
+            val target = parse(id, CHOICE_AUTO) ?: return "Use gemini-\u2026, gpt-\u2026, whisper-\u2026, or vendor/model."
             val name = when (target.provider) {
                 ModelProvider.GEMINI -> "Gemini"
                 ModelProvider.OPENAI -> "OpenAI"
                 ModelProvider.OPENROUTER -> "OpenRouter"
                 ModelProvider.LOCAL -> "on device"
             }
-            return "Sends $id to $name"
+            return "Uses your $name key"
         }
 
         private fun forcedProvider(choice: String): ModelProvider? = when (choice.trim().lowercase()) {
@@ -402,7 +402,7 @@ object PredefinedModels {
     val customModel = CloudModel(
         id = CUSTOM_ID,
         name = "Custom model",
-        description = "Any Gemini, OpenAI, or OpenRouter id",
+        description = "Type a model id below",
         badge = ModelBadge.NONE,
         benchmark = null,
         provider = ModelProvider.OPENROUTER,
@@ -434,19 +434,17 @@ object PredefinedModels {
      */
     fun resolveSelection(
         selectedId: String,
-        customModelId: String,
-        customProvider: String
+        customModelId: String
     ): TranscriptionModel? {
         val legacyOpenRouter = selectedId == LEGACY_OPENROUTER_ID
         if (selectedId != CUSTOM_ID && !legacyOpenRouter) {
             return allModels.find { it.id == selectedId }
         }
-        // Old installs stored an OpenRouter slug on this row. Keep sending
-        // those to OpenRouter until the user picks a provider themselves.
-        val choice = if (legacyOpenRouter && customProvider == CustomModelTarget.CHOICE_AUTO) {
+        // Old installs stored an OpenRouter slug on this row.
+        val choice = if (legacyOpenRouter) {
             CustomModelTarget.CHOICE_OPENROUTER
         } else {
-            customProvider
+            CustomModelTarget.CHOICE_AUTO
         }
         val target = CustomModelTarget.parse(customModelId, choice) ?: return null
         return CloudModel(

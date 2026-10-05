@@ -437,8 +437,7 @@ class OverlayService : Service() {
             // Get selected model
             val modelId = settingsRepository.selectedModelId.first()
             val customId = settingsRepository.customModelId.first()
-            val customProvider = settingsRepository.customModelProvider.first()
-            val model = PredefinedModels.resolveSelection(modelId, customId, customProvider)
+            val model = PredefinedModels.resolveSelection(modelId, customId)
             if (model == null) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(

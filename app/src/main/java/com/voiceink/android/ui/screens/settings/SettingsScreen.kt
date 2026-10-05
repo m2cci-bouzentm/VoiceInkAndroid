@@ -4,8 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import com.voiceink.android.domain.model.CustomModelTarget
 import androidx.compose.foundation.lazy.LazyColumn
@@ -261,9 +259,20 @@ fun SettingsScreen(
                     else -> true
                 }
                 val canUseCloudModel = hasRequiredApiKey
-                
+                val displayModel = if (
+                    model.id == PredefinedModels.CUSTOM_ID &&
+                    uiState.customModelId.isNotBlank()
+                ) {
+                    (model as CloudModel).copy(
+                        name = uiState.customModelId.trim(),
+                        description = CustomModelTarget.routeLabel(uiState.customModelId)
+                    )
+                } else {
+                    model
+                }
+
                 ModelItem(
-                    model = model,
+                    model = displayModel,
                     isSelected = model.id == uiState.selectedModelId ||
                         (model.id == PredefinedModels.CUSTOM_ID && uiState.selectedModelId == "openrouter-custom"),
                     isDownloaded = model.id in uiState.downloadedModels,
@@ -298,7 +307,7 @@ fun SettingsScreen(
                 SettingsGroup {
                     Spacer(modifier = Modifier.height(12.dp))
                     PlainTextField(
-                        label = "Custom model ID",
+                        label = "Model ID",
                         value = uiState.customModelId,
                         onValueChange = { typed ->
                             viewModel.setCustomModelId(typed)
@@ -306,24 +315,11 @@ fun SettingsScreen(
                                 viewModel.selectModel(PredefinedModels.CUSTOM_ID)
                             }
                         },
-                        placeholder = "gpt-transcribe or google/gemini-3.5-flash"
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ProviderChoiceRow(
-                        selected = uiState.customModelProvider,
-                        onSelect = { choice ->
-                            viewModel.setCustomModelProvider(choice)
-                            if (uiState.selectedModelId != PredefinedModels.CUSTOM_ID) {
-                                viewModel.selectModel(PredefinedModels.CUSTOM_ID)
-                            }
-                        }
+                        placeholder = "gemini-3.5-transcribe"
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = CustomModelTarget.routeLabel(
-                            uiState.customModelId,
-                            uiState.customModelProvider
-                        ),
+                        text = CustomModelTarget.routeLabel(uiState.customModelId),
                         style = MaterialTheme.typography.labelSmall,
                         color = VoiceInkColors.TextMuted,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -335,8 +331,7 @@ fun SettingsScreen(
             // Language Selection
             val selectedModel = PredefinedModels.resolveSelection(
                 uiState.selectedModelId,
-                uiState.customModelId,
-                uiState.customModelProvider
+                uiState.customModelId
             )
             val showLanguageSelector = when (selectedModel) {
                 is LocalModel -> selectedModel.supportsLanguageSelection
@@ -542,14 +537,6 @@ fun SettingsScreen(
                         placeholder = "Enter API key"
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "Model id is the Custom model field above. A slash (google/\u2026) uses OpenRouter.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = VoiceInkColors.TextMuted,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -1274,41 +1261,6 @@ private fun TranscriptDestinationSelector(
                     color = VoiceInkColors.TextPrimary
                 )
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProviderChoiceRow(
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        listOf(
-            CustomModelTarget.CHOICE_AUTO to "Auto",
-            CustomModelTarget.CHOICE_GEMINI to "Gemini",
-            CustomModelTarget.CHOICE_OPENAI to "OpenAI",
-            CustomModelTarget.CHOICE_OPENROUTER to "OpenRouter"
-        ).forEach { (id, label) ->
-            FilterChip(
-                selected = selected == id,
-                onClick = { onSelect(id) },
-                label = {
-                    Text(label, style = MaterialTheme.typography.labelMedium)
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = VoiceInkColors.Primary,
-                    selectedLabelColor = Color.White,
-                    containerColor = Color.Transparent,
-                    labelColor = VoiceInkColors.TextPrimary
-                )
-            )
         }
     }
 }

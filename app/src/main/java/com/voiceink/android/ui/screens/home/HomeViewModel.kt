@@ -48,10 +48,9 @@ class HomeViewModel @Inject constructor(
 
     val selectedModel: StateFlow<TranscriptionModel?> = combine(
         settingsRepository.selectedModelId,
-        settingsRepository.customModelId,
-        settingsRepository.customModelProvider
-    ) { modelId, customId, provider ->
-        PredefinedModels.resolveSelection(modelId, customId, provider)
+        settingsRepository.customModelId
+    ) { modelId, customId ->
+        PredefinedModels.resolveSelection(modelId, customId)
     }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
