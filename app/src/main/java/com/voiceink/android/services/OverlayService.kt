@@ -437,7 +437,7 @@ class OverlayService : Service() {
             // Get selected model
             val modelId = settingsRepository.selectedModelId.first()
             val model = PredefinedModels.allModels.find { it.id == modelId }
-                ?: PredefinedModels.gemini25Flash
+                ?: PredefinedModels.gemini35Transcribe
 
             Log.d(TAG, "Transcribing with model: ${model.name}")
 

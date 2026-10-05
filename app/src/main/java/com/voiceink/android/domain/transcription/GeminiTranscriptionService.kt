@@ -99,8 +99,7 @@ class GeminiTranscriptionService @Inject constructor(
                     ?.firstOrNull()
                     ?.content
                     ?.parts
-                    ?.firstOrNull()
-                    ?.text
+                    ?.firstNotNullOfOrNull { it.text ?: it.audioTranscription?.text }
                     ?: return@withContext TranscriptionResult.Error("No transcription in response")
 
                 TranscriptionResult.Success(transcription.trim())
@@ -126,7 +125,14 @@ private data class GeminiContent(
 @Serializable
 private data class GeminiPart(
     val text: String? = null,
-    val inlineData: GeminiInlineData? = null
+    val inlineData: GeminiInlineData? = null,
+    // The speech-specific models return transcripts here instead of in `text`.
+    val audioTranscription: GeminiAudioTranscription? = null
+)
+
+@Serializable
+private data class GeminiAudioTranscription(
+    val text: String? = null
 )
 
 @Serializable

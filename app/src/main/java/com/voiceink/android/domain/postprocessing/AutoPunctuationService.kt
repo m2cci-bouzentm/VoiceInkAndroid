@@ -61,8 +61,8 @@ class AutoPunctuationService @Inject constructor(
                     )
                 )
 
-                // Use gemini-2.0-flash for fast punctuation
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey"
+                // Flash Lite for fast punctuation
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=$apiKey"
 
                 val request = Request.Builder()
                     .url(url)

@@ -116,7 +116,7 @@ class AIEnhancementService @Inject constructor(
         val requestJson = json.encodeToString(GeminiRequest.serializer(), requestBody)
 
         val request = Request.Builder()
-            .url("$GEMINI_BASE_URL/gemini-2.5-flash:generateContent?key=$apiKey")
+            .url("$GEMINI_BASE_URL/gemini-3.8-flash:generateContent?key=$apiKey")
             .post(requestJson.toRequestBody("application/json".toMediaType()))
             .build()
 

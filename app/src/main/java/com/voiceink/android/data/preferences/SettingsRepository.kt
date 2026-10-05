@@ -61,7 +61,7 @@ class SettingsRepository @Inject constructor(
 
     // Selected Model
     val selectedModelId: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.SELECTED_MODEL_ID] ?: "gemini-2.5-flash" // Default to Gemini
+        prefs[Keys.SELECTED_MODEL_ID] ?: "gemini-3.5-transcribe" // Default to Gemini
     }
 
     suspend fun setSelectedModelId(modelId: String) {

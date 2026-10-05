@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SettingsUiState(
-    val selectedModelId: String = "gemini-2.5-flash",
+    val selectedModelId: String = "gemini-3.5-transcribe",
     val selectedLanguage: String = "auto",
     val geminiApiKey: String = "",
     val openaiApiKey: String = "",
